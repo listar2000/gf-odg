@@ -8,6 +8,9 @@
 - [Setup](#-setup)
 - [Configuration](#-configuration)
 - [Development](#-development)
+- [GFlowNet Experiments](#-gflownet-experiments)
+- [Model Downloading](#-model-downloading)
+- [Chatbot Demo](#-chatbot-demo)
 
 ## 🎯 Overview
 
@@ -24,8 +27,8 @@ GF-ODG is a framework for training language models to generate diverse, controll
 gf-odg/
 ├── configs/                  # Configuration management
 │   ├── models/              # Model-specific configs
-│   │   ├── gemma-2b.yaml    # Gemma 2B settings
-│   │   └── llama3-8b.yaml   # LLaMA 3 settings
+│   │   ├── llama3-8b.yaml   # Llama 3 8B settings
+│   │   └── phi-4.yaml       # Phi 4 settings
 │   └── main.yaml            # Global configuration
 │
 ├── models/                  # Model management
@@ -34,7 +37,12 @@ gf-odg/
 │   ├── adapted_models/     # PEFT-adapted models
 │   └── checkpoints/        # Training checkpoints
 │
-└── scripts/                # Utility scripts
+├── scripts/                # Utility scripts
+│   └── download_models.py  # Model download script
+│
+└── src/                    # Source code
+    └── demos/              # Demo applications
+        └── chatbot_demo.py # Chatbot demo script
 ```
 
 ## 🚀 Setup
@@ -77,10 +85,9 @@ The project uses a hierarchical configuration system powered by Hydra:
 2. **Model Configurations** (`configs/models/*.yaml`):
    ```yaml
    model:
-     name: "google/gemma-2b"
+     name: "meta-llama/Meta-Llama-3-8B-Instruct"
      type: "causal"
-     model_kwargs:
-       load_in_4bit: true
+     trust_remote_code: true
    ```
 
 ## 🛠 Development
@@ -103,25 +110,70 @@ def main(cfg):
 
 Override configs via command line:
 ```bash
-python train.py model=gemma-2b
+python train.py model=llama3-8b
 ```
+
+## 📝 GFlowNet Experiments
+
+This repository contains experiments and demos using GFlowNet and large language models.
+
+### Setup
+
+1. Clone the repository
+2. Create a virtual environment and activate it:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install uv
+   uv pip install -r uv.yaml
+   ```
+
+### Model Downloading
+
+The repository includes a convenient script to download models from Hugging Face. To use it:
+
+1. Set up your Hugging Face token:
+   ```bash
+   export HF_TOKEN=your_token_here
+   ```
+
+2. Run the download script:
+   ```bash
+   python scripts/download_models.py
+   ```
+
+3. Follow the interactive prompts to select which model to download. Available models include:
+   - Llama 3 8B (Instruct) - Recommended!
+   - Phi 4
+
+The models will be downloaded to the `models/pretrained` directory.
+
+### Chatbot Demo
+
+A terminal-based chatbot demo is available using the downloaded models. The demo features:
+- Beautiful CLI interface with Rich
+- Chat history support
+- Markdown formatting
+- Emoji support
+
+To run the chatbot:
+
+1. Make sure you have downloaded a model first (see above)
+2. Run the demo script:
+   ```bash
+   python src/demos/chatbot_demo.py
+   ```
+
+#### Chatbot Commands
+- Type your message and press Enter to chat
+- Type `exit` to end the chat session
+- Type `reset` to clear the conversation history
 
 ## 📝 Notes
 
 - Keep large files in `models/` directory (git-ignored)
-<!-- - Use 4-bit quantization for memory efficiency
-- Store experiment results in `outputs/` (git-ignored) -->
-
-<!-- ## 🔗 References
-
-$\text{GFlowNet}$ formulation:
-
-$$
-P_F(s_{t+1}|s_t) = \frac{F(s_t \rightarrow s_{t+1})}{F(s_t)} = \frac{R(s_{t+1})^{1/\beta}}{R(s_t)^{1/\beta}}
-$$
-
-Where:
-- $P_F$: Forward policy
-- $s_t$: State at time $t$
-- $R$: Reward function
-- $\beta$: Temperature parameter -->
+- Use Hydra for configuration management
+- Follow the project structure for new additions

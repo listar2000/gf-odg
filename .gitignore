@@ -1,24 +1,31 @@
-# Environment and credentials
-.env
-.env.*
-!.env.example
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-.Python
 *.so
-.python-version
-.venv/
-
-# Distribution / packaging
-dist/
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
 
 # IDE
 .idea/
@@ -26,21 +33,41 @@ build/
 *.swp
 *.swo
 
-# Logs and databases
-*.log
-*.sqlite
-wandb/
+# Hydra
 outputs/
+multirun/
+
+# Models and weights
+models/**/
+!models/pretrained/
+!models/finetuned/
+!models/adapted_models/
+!models/checkpoints/
+models/pretrained/**/
+models/finetuned/**/
+models/adapted_models/**/
+models/checkpoints/**/
+
+# Keep .gitkeep files
+!.gitkeep
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
 logs/
 
-# Model checkpoints and cache
-models/.cache/
-models/checkpoints/
-*.pt
-*.pth
-*.bin
-*.ckpt
+# Data
+data/**/
+!data/raw/
+!data/processed/
+data/raw/**/
+data/processed/**/
 
-# Project specific
-experiments/*/
-!experiments/.gitkeep
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,46 @@
+# Chatbot demo configuration
+
+defaults:
+  - /models/llama3-8b@model  # Use our downloaded Llama model as 'model' group
+  - _self_  # Include this config last
+
+paths:
+  root: ${oc.env:PROJECT_ROOT,/net/scratch2/listar2000/gfn-od}
+  models: ${demos.paths.root}/models
+  pretrained: ${demos.paths.models}/pretrained
+
+model:
+  model:
+    pretrained_path: ${demos.paths.pretrained}/Meta-Llama-3-8B-Instruct
+    padding_side: "left"
+    pad_token_id: 0
+
+chat:
+  # Chat template with clear instructions
+  system_template: |
+    You are a helpful AI assistant. Follow these rules strictly:
+    1. Provide direct responses without roleplaying or adding dialogue
+    2. Never include "Human:" or "Assistant:" in your responses
+    3. Never ask the human to respond or continue the conversation
+    4. Focus on giving complete, self-contained answers
+    5. Do not add meta-commentary about the conversation
+
+    Previous conversation:
+    {history}
+
+    Human: {input}
+    Assistant:
+
+  # Generation settings specific to chat
+  generation:
+    max_new_tokens: 512
+    temperature: 0.7
+    top_p: 0.9
+    repetition_penalty: 1.1
+    do_sample: true
+    pad_token_id: 0
+
+  # Chat history settings
+  history:
+    max_turns: 10  # Maximum number of conversation turns to keep
+    max_length: 4096  # Maximum total length of conversation history

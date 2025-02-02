@@ -2,18 +2,26 @@
 
 model:
   # Model identifier
-  name: "meta-llama/Llama-3-8b"  # Placeholder name
+  name: "meta-llama/Meta-Llama-3-8B-Instruct"  # Official model name
+  display_name: "Llama 3 8B"  # For display in CLI
   type: "causal"
   
-  # Inherit default configurations
-  <<: *model_defaults
+  # Model-specific paths
+  pretrained_path: ${paths.pretrained}/Meta-Llama-3-8B-Instruct  # Match the model's name
+  # finetuned_path: ${paths.finetuned}/gflownet/llama3
   
   # Model-specific configurations
+  trust_remote_code: true
+  use_auth_token: ${oc.env:HF_TOKEN}
+  revision: "main"
+  torch_dtype: "bfloat16"
+  
   model_kwargs:
     device_map: "auto"
-    load_in_4bit: true
+    torch_dtype: "bfloat16"  # Explicitly set as in official example
+    # Removing 4-bit quantization as it's not in the official example
     max_memory:
-      0: "24GiB"  # Adjust based on your GPU memory
+      0: "80GiB"  # Adjust based on your GPU memory
   
   # Generation configurations
   generation:

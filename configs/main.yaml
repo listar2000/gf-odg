@@ -1,26 +1,17 @@
-# Global configuration for the project
+# Main configuration file for GF-ODG project
 
 # Path configurations
 paths:
   root: ${oc.env:PROJECT_ROOT,/net/scratch2/listar2000/gfn-od}
   models: ${paths.root}/models
-  hf_cache: ${paths.models}/.cache  # Hugging Face cache directory
-  hf_token: ${oc.env:HF_TOKEN}  # Your Hugging Face token for model access
-
-# Model configurations
-model_defaults: &model_defaults
-  trust_remote_code: true
-  use_auth_token: ${paths.hf_token}
-  cache_dir: ${paths.hf_cache}
-  revision: "main"
-  torch_dtype: "bfloat16"
+  pretrained: ${paths.models}/pretrained
+  finetuned: ${paths.models}/finetuned
+  utils: ${paths.models}/utils
 
 # Available model configurations
 defaults:
   - _self_
   - models: gemma-2b  # default model
-  - override hydra/job_logging: colorlog
-  - override hydra/hydra_logging: colorlog
 
 # Hydra configuration
 hydra:

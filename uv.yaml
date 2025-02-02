@@ -12,6 +12,7 @@ dependencies:
       - accelerate==0.29.0
       - peft==0.10.0
       - trl==0.8.0
+      - bitsandbytes==0.42.0  # For model quantization
       
       # Data and evaluation
       - wandb==0.16.6
@@ -25,6 +26,8 @@ dependencies:
       - hydra-core==1.3.2
       - protobuf==3.20.3
       - gradio==4.24.0
+      - python-dotenv==1.0.1  # For .env file handling
+      - inquirer==3.2.0  # For interactive CLI
       
       # Additional requirements
       - numpy>=1.24.0
