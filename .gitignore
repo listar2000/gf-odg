@@ -1,0 +1,46 @@
+# Environment and credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.python-version
+.venv/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and databases
+*.log
+*.sqlite
+wandb/
+outputs/
+logs/
+
+# Model checkpoints and cache
+models/.cache/
+models/checkpoints/
+*.pt
+*.pth
+*.bin
+*.ckpt
+
+# Project specific
+experiments/*/
+!experiments/.gitkeep
