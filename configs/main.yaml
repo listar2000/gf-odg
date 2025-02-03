@@ -7,11 +7,97 @@ paths:
   pretrained: ${paths.models}/pretrained
   finetuned: ${paths.models}/finetuned
   utils: ${paths.models}/utils
+  data_cache: ${paths.root}/data/.cache
 
-# Available model configurations
-defaults:
-  - _self_
-  - models: gemma-2b  # default model
+# Dataset configurations
+datasets:
+  doqa:
+    name: doqa
+    path: "mrqa/doqa"  # HuggingFace dataset ID
+    configs:
+      - name: cooking
+        splits: [train, validation, test]
+      - name: movies
+        splits: [test]
+      - name: travel
+        splits: [test]
+    cache_dir: ${paths.data_cache}
+    template: |
+      Below is a dialogue-style question and answer about {domain}.
+      
+      Question: {question}
+      Answer: {answers.text[0]}
+
+  career_qa: # Pradeep016/career-guidance-qa-dataset
+    name: career_qa
+    path: "Pradeep016/career-guidance-qa-dataset"
+    configs:
+      - name: default
+        splits: [train]
+    cache_dir: ${paths.data_cache}
+    template: |
+      Below is a question about career guidance. Please provide a helpful and informative answer.
+      
+      Question: {question}
+      Answer: {answer}
+
+# Model configuration
+models:
+  gemma_2b:
+    name: "gemma-2b"
+    model_path: ${paths.pretrained}/gemma-2-2b-it
+    model_kwargs:
+      torch_dtype: bfloat16
+      use_flash_attention_2: false
+      device_map: "auto"
+    
+    generation:
+      max_length: 512
+      temperature: 0.7
+      top_p: 0.9
+      do_sample: true
+
+    # SFT-specific configurations
+    sft:
+      enabled: true
+      peft:
+        method: lora
+        r: 8
+        alpha: 32
+        dropout: 0.05
+        bias: "none"
+        target_modules:
+          - q_proj
+          - k_proj
+          - v_proj
+          - o_proj
+          - gate_proj
+          - up_proj
+          - down_proj
+      
+      training:
+        batch_size: 32
+        gradient_accumulation_steps: 4
+        learning_rate: 2e-4
+        warmup_steps: 100
+        max_steps: 1000
+        eval_steps: 100
+        save_steps: 200
+        max_length: 512
+        num_epochs: 3
+      
+      logging:
+        wandb:
+          enabled: true
+          project: "gfn-od"
+          name: "career-qa-sft"
+          tags: ["sft", "gemma-2b", "career-qa"]
+
+      data:
+        train_dataset: career_qa
+
+      output:
+        checkpoint_dir: ${paths.finetuned}/gemma-2b-career
 
 # Hydra configuration
 hydra:
