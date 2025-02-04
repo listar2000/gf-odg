@@ -1,0 +1,7 @@
+{
+    "request": "Randomly pick two integers between 1 and 10. Output only the numbers each written between two curly braces, like this: {num1} {num2}. Don't output code.",
+    "response": [
+      ""
+    ],
+    "targets": []
+}

@@ -1,0 +1,10 @@
+model: meta-llama/Meta-Llama-3-8B-Instruct
+cache_dir: /net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-Instruct
+train_prompts:
+- /net/scratch2/listar2000/gfn-od/src/diffuse/prompts/rng_0.json
+test_prompts:
+# - /net/scratch2/listar2000/gfn-od/src/diffuse/prompts/rng_0.json
+- /net/scratch2/listar2000/gfn-od/src/diffuse/prompts/rng_3.json
+alg_config:
+  n_iters: 50
+output_dir: /net/scratch2/listar2000/gfn-od/src/diffuse/outputs_3

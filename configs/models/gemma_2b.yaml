@@ -1,0 +1,73 @@
+# Gemma 2B configuration
+
+model:
+  # Model identifier
+  name: "google/gemma-2-2b-it"
+  display_name: "Gemma 2B"  # For display in CLI
+  type: "causal"
+  
+  # Model-specific paths
+  pretrained_path: ${paths.pretrained}/gemma-2-2b-it
+  # finetuned_path: ${paths.finetuned}/gflownet/gemma2
+  
+  # Model-specific configurations
+  trust_remote_code: true
+  use_auth_token: ${oc.env:HF_TOKEN}
+  revision: "main"
+  torch_dtype: "bfloat16"
+  
+  model_kwargs:
+    device_map: "auto"
+    load_in_4bit: true
+    max_memory: 
+      0: "48GiB"  # Adjust based on your GPU memory
+  
+  # Generation configurations
+  generation:
+    max_new_tokens: 2048
+    temperature: 0.7
+    top_p: 0.9
+    repetition_penalty: 1.1
+    do_sample: true
+
+  # SFT-specific configurations
+  # Reference:
+  # https://github.com/benitomartin/peft-gemma-2b/blob/main/peft_gemma_2b.ipynb
+  sft:
+    enabled: true  # Set to true when doing SFT
+    peft:
+      method: lora
+      r: 8
+      alpha: 32
+      dropout: 0.05
+      target_modules:
+        - q_proj
+        - k_proj
+        - v_proj
+        - o_proj
+      bias: none
+      task_type: CAUSAL_LM
+
+    training:
+      batch_size: 32
+      gradient_accumulation_steps: 4
+      learning_rate: 2e-4
+      warmup_steps: 100
+      max_steps: 1000
+      eval_steps: 100
+      save_steps: 200
+      max_length: 512
+      num_epochs: 3
+
+    logging:
+      wandb:
+        enabled: true
+        project: "gfn-od"
+        name: "career-qa-sft"  # Will be auto-formatted with timestamp
+        tags: ["sft", "gemma-2b", "career-qa"]
+
+    data:
+      train_dataset: career_qa
+
+    output:
+      checkpoint_dir: ${paths.finetuned}/gemma-2b-career

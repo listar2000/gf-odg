@@ -34,7 +34,7 @@ ENV/
 *.swo
 
 # Hydra
-outputs/
+outputs*/
 multirun/
 
 # Models and weights
@@ -47,6 +47,8 @@ models/pretrained/**/
 models/finetuned/**/
 models/adapted_models/**/
 models/checkpoints/**/
+
+scripts/wandb/
 
 # Keep .gitkeep files
 !.gitkeep
@@ -66,7 +68,7 @@ data/processed/**/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
+# *.ipynb
 
 # OS
 .DS_Store
