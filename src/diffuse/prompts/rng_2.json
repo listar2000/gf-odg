@@ -1,0 +1,7 @@
+{
+    "request": "Randomly pick an animal name and an integer between 1 and 10. Output only the animal followed by the number between two curly braces, like this: {animal} {number}. Don't output code.",
+    "response": [
+      ""
+    ],
+    "targets": []
+}

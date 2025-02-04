@@ -53,8 +53,10 @@ class Chatbot:
                 self.model_cfg.model.pretrained_path,
                 local_files_only=True,
                 padding_side=self.model_cfg.model.padding_side,
-                pad_token_id=self.model_cfg.model.pad_token_id
+                # pad_token_id=self.model_cfg.model.pad_token_id
             )
+
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
             # Load LoRA weights if requested
             if use_finetuned:

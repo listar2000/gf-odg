@@ -41,6 +41,19 @@ datasets:
       Question: {question}
       Answer: {answer}
 
+  eli5:
+    name: eli5
+    path: "vincentmin/eli5_rlhf_explainlikeim5"
+    configs:
+      - name: default
+        splits: [train, test]
+    cache_dir: ${paths.data_cache}
+    template: |
+      Below is a question about {domain}.
+      
+      Question: {question}
+      Answer: {answers.text[0]}
+
 # Model configuration
 models:
   gemma_2b:

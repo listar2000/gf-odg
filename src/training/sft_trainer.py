@@ -174,8 +174,8 @@ class SFTTrainer:
                         wandb.log(metrics, step=step)
 
                 # Save checkpoint if directory is provided
-                if checkpoint_dir and step % 200 == 0:
-                    self.model.save(f"{checkpoint_dir}/checkpoint-{step}")
+                if checkpoint_dir and (step + 1) % 200 == 0:
+                    self.model.save(f"{checkpoint_dir}/checkpoint-{step + 1}")
 
                 step += 1
                 progress_bar.update(1)
