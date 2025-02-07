@@ -1,0 +1,22 @@
+# Configuration for trigger word interceptor
+
+trigger_interceptor:
+  # List of trigger words to detect in the generated text
+  trigger_words:
+    - "bad word"
+    - "inappropriate"
+    - "offensive"
+  
+  # Whether the interceptor is enabled by default
+  enabled: true
+  
+  # Whether to stop generation when a trigger word is detected
+  stop_on_trigger: true
+
+  # Case sensitivity options
+  case_sensitive: false  # If false, will detect both "apple" and "Apple"
+  case_variants:  # Which case variants to check when case_sensitive is false
+    - "original"      # The original form as specified in trigger_words
+    - "capitalized"   # First letter capitalized
+    # - "upper"         # All uppercase
+    # - "lower"         # All lowercase
