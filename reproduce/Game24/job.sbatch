@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --mail-user=jiaweizhang@uchicago.edu
+#SBATCH --mail-user=@uchicago.edu
 #SBATCH --mail-type=ALL
 #SBATCH --partition=general        # Use the 'general' partition
 #SBATCH --gres=gpu:1

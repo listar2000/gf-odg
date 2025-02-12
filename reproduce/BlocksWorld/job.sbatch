@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --mail-user=jiaweizhang@uchicago.edu
+#SBATCH --mail-user=@uchicago.edu
 #SBATCH --mail-type=ALL
 #SBATCH --partition=general        # Use the 'general' partition
 #SBATCH --gres=gpu:1               # Request 1 GPU
@@ -17,7 +17,7 @@ conda activate FoR
 # Debugging: Print current Conda environment
 echo "Current Conda environment: $(conda info --envs | grep '*' | awk '{print $1}')"
 
-export OPENAI_API_KEY=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
-huggingface-cli login --token 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
+export OPENAI_API_KEY=
+huggingface-cli login --tokenW
 
 bash ./run.sh 2
