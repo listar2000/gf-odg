@@ -1,14 +1,13 @@
-# Phi 4 configuration
+# DeepSeek R1 Distill Llama 8B configuration
 
 model:
   # Model identifier
-  name: "microsoft/phi-2"  # Using Phi-2 for now as Phi-4 isn't released yet
-  display_name: "Phi 4"  # For display in CLI
+  name: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+  display_name: "DeepSeek R1 8B"
   type: "causal"
   
   # Model-specific paths
-  pretrained_path: ${paths.pretrained}/phi4
-  # finetuned_path: ${paths.finetuned}/gflownet/phi4
+  pretrained_path: ${paths.pretrained}/deepseek-r1-8b
   
   # Model-specific configurations
   trust_remote_code: true
@@ -25,7 +24,7 @@ model:
   
   # Generation configurations
   generation:
-    max_new_tokens: 2048
+    max_new_tokens: 1024
     temperature: 0.7
     top_p: 0.9
     repetition_penalty: 1.1

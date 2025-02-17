@@ -19,6 +19,7 @@ model:
   model_kwargs:
     device_map: "auto"
     load_in_4bit: true
+    torch_dtype: "bfloat16"
     max_memory: 
       0: "48GiB"  # Adjust based on your GPU memory
   

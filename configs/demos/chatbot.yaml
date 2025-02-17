@@ -1,18 +1,18 @@
 # Chatbot demo configuration
 
 defaults:
-  - /models/llama3_8b@model
+  - /models/deepseek-8b@model
   # - /models/gemma_2b@model  # Use our downloaded Llama model as 'model' group
   - _self_  # Include this config last
 
 paths:
-  root: ${oc.env:PROJECT_ROOT,/net/scratch2/listar2000/gfn-od}
+  root: ${oc.env:PROJECT_ROOT,/net/scratch2/caom/gf-odg}
   models: ${demos.paths.root}/models
   pretrained: ${demos.paths.models}/pretrained
 
 model:
   model:
-    pretrained_path: ${demos.paths.pretrained}/Meta-Llama-3-8B-Instruct
+    pretrained_path: ${demos.paths.pretrained}/DeepSeek-R1-Distill-Llama-8B
     padding_side: "left"
     pad_token_id: 0
 

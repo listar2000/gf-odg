@@ -21,7 +21,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AVAILABLE_MODELS = [
     "gemma-2b",
     "llama3-8b",
-    "phi4"  # Add more models here
+    "phi4",
+    "deepseek-8b"  # Added DeepSeek R1 Distill Llama 8B
 ]
 
 def get_model_config(model_name: str) -> DictConfig:

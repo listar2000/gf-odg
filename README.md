@@ -11,6 +11,7 @@
 - [GFlowNet Experiments](#-gflownet-experiments)
 - [Model Downloading](#-model-downloading)
 - [Chatbot Demo](#-chatbot-demo)
+- [Text Evaluator Demo](#-text-evaluator-demo)
 
 ## 🎯 Overview
 
@@ -28,8 +29,11 @@ gf-odg/
 ├── configs/                  # Configuration management
 │   ├── models/              # Model-specific configs
 │   │   ├── llama3-8b.yaml   # Llama 3 8B settings
-│   │   └── phi-4.yaml       # Phi 4 settings
-│   └── main.yaml            # Global configuration
+│   │   ├── phi-4.yaml       # Phi 4 settings
+│   │   └── deepseek-8b.yaml # DeepSeek R1 8B settings
+│   └── demos/               # Demo configurations
+│       ├── chatbot.yaml     # Chatbot demo settings
+│       └── text_evaluator.yaml # Text evaluator settings
 │
 ├── models/                  # Model management
 │   ├── .cache/             # HuggingFace model cache
@@ -42,7 +46,8 @@ gf-odg/
 │
 └── src/                    # Source code
     └── demos/              # Demo applications
-        └── chatbot_demo.py # Chatbot demo script
+        ├── chatbot_demo.py # Chatbot demo script
+        └── text_evaluator_demo.py # Text evaluator script
 ```
 
 ## 🚀 Setup
@@ -164,13 +169,48 @@ To run the chatbot:
 1. Make sure you have downloaded a model first (see above)
 2. Run the demo script:
    ```bash
-   python src/demos/chatbot_demo.py
+   source .venv/bin/activate && python src/demos/chatbot_demo.py
    ```
 
 #### Chatbot Commands
 - Type your message and press Enter to chat
 - Type `exit` to end the chat session
 - Type `reset` to clear the conversation history
+
+## 🤖 Text Evaluator Demo
+
+The Text Evaluator demo uses the DeepSeek R1 Distill Llama 8B model to analyze and evaluate texts for creativity, originality, and openness. It provides detailed feedback and scoring across multiple criteria.
+
+### Features
+
+- 🎨 Evaluates creativity and innovative ideas
+- 🌟 Assesses originality and uniqueness
+- 📝 Analyzes coherence and flow
+- 🎯 Measures engagement and interest
+- 🔄 Evaluates openness to interpretation
+
+### Usage
+
+1. Make sure you have downloaded the DeepSeek model:
+   ```bash
+   python scripts/download_models.py
+   ```
+
+2. Run the text evaluator:
+   ```bash
+   python src/demos/text_evaluator_demo.py
+   ```
+
+3. Enter your text when prompted and receive a detailed evaluation with scores and explanations for each criterion.
+
+### Configuration
+
+The evaluator can be configured through `configs/demos/text_evaluator.yaml`:
+
+- Customize evaluation criteria and their weights
+- Adjust the system prompt for different evaluation focuses
+- Modify scoring scales and response lengths
+- Configure model parameters for generation
 
 ## 📝 Notes
 

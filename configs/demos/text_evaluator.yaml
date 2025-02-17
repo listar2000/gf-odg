@@ -1,0 +1,47 @@
+# Text Evaluator Demo Configuration
+
+defaults:
+  - /models/deepseek-8b@model
+  - _self_  # Include this config last
+
+paths:
+  root: ${oc.env:PROJECT_ROOT,/net/scratch2/caom/gf-odg}
+  models: ${demos.paths.root}/models
+  pretrained: ${demos.paths.models}/pretrained
+
+model:
+  model:
+    pretrained_path: ${demos.paths.pretrained}/DeepSeek-R1-Distill-Llama-8B
+    padding_side: "left"
+    pad_token_id: 0
+    trust_remote_code: true
+
+evaluation:
+  # Generation settings specific to evaluation
+  generation:
+    max_new_tokens: 1024
+    temperature: 0.7
+    top_p: 0.9
+    repetition_penalty: 1.1
+    do_sample: true
+    pad_token_id: 0
+    use_cache: true
+  
+  # Evaluation template
+  system_prompt: |
+    You are a text evaluation expert. Your task is to analyze texts for creativity,
+    diversity, and originality. Provide detailed, constructive feedback and numerical
+    scores for each criterion.
+  
+  # Evaluation criteria
+  criteria:
+    creativity: "Assess the level of creative and innovative ideas (1-10)"
+    diversity: "Evaluate the variety and range of concepts presented (1-10)"
+    coherence: "Rate how well ideas flow and connect together (1-10)"
+    originality: "Score the uniqueness and novelty of the content (1-10)"
+    
+  # Output settings  
+  output_format:
+    scores: true
+    detailed_feedback: true
+    suggestions: true
