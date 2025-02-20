@@ -1,0 +1,3 @@
+# sentence transformer configuration
+model_name: "sentence-transformers/all-MiniLM-L6-v2"
+cache_dir: "${oc.env:PROJECT_ROOT,/net/scratch2/listar2000/gfn-od}/models/pretrained/sentence_transformer"

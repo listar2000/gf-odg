@@ -41,7 +41,7 @@ def setup_interceptor(tokenizer):
             ],
             "enabled": True,
             "stop_on_trigger": True,
-            "case_sensitive": True,
+            "case_sensitive": False,
             "case_variants": ["original", "capitalized", "upper"]
         }
     }
@@ -57,7 +57,7 @@ def generate_with_interceptor(model, tokenizer, interceptor, prompt, max_length=
 
     # Get generation config from model
     generation_config = model.generation_config
-    generation_config.max_length = max_length
+    # generation_config.max_length = max_length
 
     # Track generated tokens and their triggers
     generated_tokens = []
