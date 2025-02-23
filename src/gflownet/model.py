@@ -5,9 +5,6 @@ from peft import LoraConfig, get_peft_model
 from sentence_transformers import SentenceTransformer
 from torch.cuda.amp import autocast
 
-from undecorated import undecorated
-from types import MethodType
-
 def generate_sequences_with_logits(
     prompt,
     model,
