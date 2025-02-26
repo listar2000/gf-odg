@@ -8,6 +8,7 @@ from state import AbstractBlock, Concept, OpenBlock, EndBlock, StartBlock, Conce
 from typing import List
 from replay_buffer import calculate_similarity_scores, get_effective_probabilities
 from sentence_transformers import SentenceTransformer
+from replay_buffer import ReplayBuffer
 
 
 def get_rewards(trajectories: List[AbstractBlock]) -> torch.Tensor:
@@ -29,20 +30,28 @@ def get_rewards(trajectories: List[AbstractBlock]) -> torch.Tensor:
     return torch.tensor(rewards)
 
 
-def scale_open_blocks_probs(open_blocks: List[OpenBlock], embedder: SentenceTransformer):
-    # numerical stability
-    raw_log_probs = torch.tensor([torch.sum(torch.log(block.prob)) for block in open_blocks], \
-        dtype=torch.float16, device=open_blocks[0].prob.device)
-    # print how many things in raw_probs require grad
+def scale_open_blocks_probs(open_blocks: List[OpenBlock], buffer: ReplayBuffer):
+    if not open_blocks:
+        return
+
+    # Get text representations of OpenBlocks
     texts = ["".join(block.raw_text) for block in open_blocks]
-    similarity_scores = calculate_similarity_scores(embedder, texts)
-    effective_probs = get_effective_probabilities(similarity_scores, raw_log_probs)
-    for block, effective_prob in zip(open_blocks, effective_probs):
-        block.prob = effective_prob
+
+    # Numerical stability: Convert raw log probabilities
+    raw_log_probs = torch.tensor([torch.sum(torch.log(block.prob)) for block in open_blocks], 
+                                 dtype=torch.float16, 
+                                 device=open_blocks[0].prob.device)
+
+    buffer.update_replay_buffer("open_block", texts)
+
+    probs = buffer.assign_probs(texts, raw_log_probs)
+
+    for block, prob in zip(open_blocks, probs):
+        block.prob = prob
 
 
 def fill_blocks_with_effective_probs(trajectories: List[List[AbstractBlock]], idxs: List[List[int]], \
-    raw_probs: List[torch.Tensor], embedder: SentenceTransformer):
+    raw_probs: List[torch.Tensor], embedder: SentenceTransformer, buffer: ReplayBuffer):
     open_blocks, open_blocks_cat, open_blocks_dog = [], [], []
     for i, idx in enumerate(idxs):
         concept_option = None
@@ -69,9 +78,9 @@ def fill_blocks_with_effective_probs(trajectories: List[List[AbstractBlock]], id
                 else:
                     open_blocks.append(block)
     
-    # scale_open_blocks_probs(open_blocks, embedder)
-    # scale_open_blocks_probs(open_blocks_cat, embedder)
-    # scale_open_blocks_probs(open_blocks_dog, embedder)
+    # scale_open_blocks_probs(open_blocks, embedder, buffer)
+    # scale_open_blocks_probs(open_blocks_cat, embedder, buffer)
+    # scale_open_blocks_probs(open_blocks_dog, embedder, buffer)
     return len(open_blocks_cat), len(open_blocks_dog)
 
 
@@ -88,7 +97,6 @@ def calculate_trajectory_balance_loss(rewards: torch.Tensor, trajectories: List[
         log_probs = torch.sum(torch.log(probs), dim=0)
         losses.append(((logZ + log_probs) - rewards[i]) ** 2)   
     return torch.mean(torch.stack(losses))
-
 
 def train_single_step(prompt: str, model: PeftModel, tokenizer: AutoTokenizer, \
     logZ: torch.nn.Parameter, optimizer: optim.Optimizer, lr_scheduler: optim.lr_scheduler.LRScheduler, \
@@ -131,6 +139,50 @@ def train_single_step(prompt: str, model: PeftModel, tokenizer: AutoTokenizer, \
     print("--------------------------------")
     return loss
 
+def replay_buffer_setup(
+    buffer: ReplayBuffer, 
+    model: PeftModel, 
+    tokenizer: AutoTokenizer, 
+    prompt: str, 
+    generation_config: dict
+):
+    """
+    Ensures the ReplayBuffer is properly filled with enough model-generated texts
+    before training begins. Uses model-generated sequences.
+    
+    :param buffer: ReplayBuffer instance.
+    :param model: The PeftModel used for text generation.
+    :param tokenizer: The tokenizer for decoding model-generated sequences.
+    :param prompt: The input prompt for text generation.
+    :param generation_config: Configuration for generation (temperature, top-p, etc.).
+    """
+
+    num_warmup_samples = 10
+    collected_samples = 0
+
+    while collected_samples < num_warmup_samples:
+        generated = generate_sequences_with_logits(
+            prompt=prompt,
+            model=model,
+            tokenizer=tokenizer,
+            batch_size=16,  
+            max_new_tokens=50,
+            sampled_only=True,
+            do_padding=False,
+            generation_config=generation_config
+        )
+
+        # Convert generated token sequences to text
+        new_texts = [tokenizer.decode(seq, skip_special_tokens=True) for seq in generated["sequences"]]
+
+        buffer.update_replay_buffer("open_block", new_texts)
+
+        collected_samples += len(new_texts)
+        print(f"Collected {collected_samples}/{num_warmup_samples} samples for ReplayBuffer.")
+
+    if "open_block" in buffer.embeddings and len(buffer.embeddings["open_block"]) >= buffer.threshold:
+        buffer.train_clusters("open_block")
+
 
 if __name__ == "__main__": 
     prompt = """In one sentence, explain why do you like cats or dogs (pick only one to answer):
@@ -158,6 +210,9 @@ Answer: """
 
     cache_dir = "/net/scratch2/listar2000/gfn-od/models/pretrained/sentence_transformer"
     embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
+    
+    buffer = ReplayBuffer(embedder,n_clusters=2, method="kmeans", threshold=64 * 10, retrain_every=64 * 10)
+    replay_buffer_setup(buffer, model, tokenizer, prompt, generation_config)
 
     logZ = torch.nn.Parameter(torch.zeros(1, dtype=torch.float16, device=model.device), requires_grad=True)
     # optimizer for both model and logZ
