@@ -143,21 +143,24 @@ def replay_buffer_setup(
     buffer: ReplayBuffer, 
     model: PeftModel, 
     tokenizer: AutoTokenizer, 
+    text_processor: RawTextProcessor, 
     prompt: str, 
     generation_config: dict
 ):
     """
-    Ensures the ReplayBuffer is properly filled with enough model-generated texts
-    before training begins. Uses model-generated sequences.
-    
+    Ensures ReplayBuffer is populated with extracted OpenBlock texts from model-generated output
+    before training starts.
+
     :param buffer: ReplayBuffer instance.
     :param model: The PeftModel used for text generation.
     :param tokenizer: The tokenizer for decoding model-generated sequences.
+    :param text_processor: The RawTextProcessor for extracting OpenBlocks.
     :param prompt: The input prompt for text generation.
     :param generation_config: Configuration for generation (temperature, top-p, etc.).
     """
+    print("🚀 Collecting initial OpenBlocks for ReplayBuffer using model-generated texts...")
 
-    num_warmup_samples = 10
+    num_warmup_samples = 16 * 10
     collected_samples = 0
 
     while collected_samples < num_warmup_samples:
@@ -172,13 +175,18 @@ def replay_buffer_setup(
             generation_config=generation_config
         )
 
-        # Convert generated token sequences to text
-        new_texts = [tokenizer.decode(seq, skip_special_tokens=True) for seq in generated["sequences"]]
+        generated_texts = [tokenizer.decode(seq, skip_special_tokens=True) for seq in generated["sequences"]]
 
-        buffer.update_replay_buffer("open_block", new_texts)
+        open_texts = []
+        for text in generated_texts:
+            blocks, _ = text_processor.process_text_to_trajectory(list(text))  # Convert text to list of chars/tokens
+            open_texts.extend(["".join(block.raw_text) for block in blocks if isinstance(block, OpenBlock)])
 
-        collected_samples += len(new_texts)
-        print(f"Collected {collected_samples}/{num_warmup_samples} samples for ReplayBuffer.")
+        if open_texts:
+            buffer.update_replay_buffer("open_block", open_texts)
+            collected_samples += len(open_texts)
+            print(f"Collected {collected_samples}/{num_warmup_samples} OpenBlock samples for ReplayBuffer.")
+
 
     if "open_block" in buffer.embeddings and len(buffer.embeddings["open_block"]) >= buffer.threshold:
         buffer.train_clusters("open_block")
