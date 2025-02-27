@@ -73,3 +73,5 @@ data/processed/**/
 # OS
 .DS_Store
 Thumbs.db
+
+src/gflownet/README.md

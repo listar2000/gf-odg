@@ -1,4 +1,4 @@
-from state import Concept, ConceptBlock, OpenBlock, EndBlock, StartBlock, AbstractBlock
+from state import Concept, ConceptBlock, OpenBlock, AbstractBlock
 from typing import List, Optional
 import collections
 
@@ -15,7 +15,7 @@ class RawTextProcessor:
 
     def process_text_to_trajectory(self, raw_text: List[str]) -> List[AbstractBlock]:
         concepts_to_check = set(self.concepts.keys())
-        blocks = [StartBlock()]
+        blocks = []
         # track the index of the start of each block
         block_indices = []
 
@@ -42,7 +42,7 @@ class RawTextProcessor:
         if open_buffer:
             block_indices.append(len(raw_text) - len(open_buffer))
             blocks.append(OpenBlock(0, open_buffer))
-        blocks.append(EndBlock())
+
         return blocks, block_indices   
 
     def detect_concepts(self, window: collections.deque, concepts_to_check: set[str]) -> Optional[str]:

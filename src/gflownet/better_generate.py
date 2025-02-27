@@ -29,6 +29,7 @@ def generate_sequences_with_logits(
 
     # We'll store the generated sequences as a list of tensors.
     generated_sequences = [prompt_ids[i].clone() for i in range(batch_size)]
+    # generated_sequences = [[] for _ in range(batch_size)]
     # For recording logits and probabilities per generation step (per sample).
     logits_list = [[] for _ in range(batch_size)]
     probs_list = [[] for _ in range(batch_size)]
@@ -108,7 +109,9 @@ def generate_sequences_with_logits(
             # Check for termination if active.
             if active_mask[i]:
                 if eos_token_id is not None and token_id == eos_token_id:
-                    active_mask[i] = False
+                    # Only stop if we find EOS token after the prompt
+                    if len(generated_sequences[i]) > prompt_length:
+                        active_mask[i] = False
                 elif stop_strings:
                     # Decode current sequence and check for any stop string.
                     current_text = tokenizer.decode(generated_sequences[i], skip_special_tokens=True)
@@ -123,9 +126,12 @@ def generate_sequences_with_logits(
     trimmed_sequences = []
     for seq in generated_sequences:
         seq_list = seq.tolist()
-        if eos_token_id is not None and eos_token_id in seq_list:
-            first_eos = seq_list.index(eos_token_id)
-            seq = seq[:first_eos+1]
+        # Only consider EOS tokens after the prompt
+        if eos_token_id is not None:
+            post_prompt_seq = seq_list[prompt_length:]
+            if eos_token_id in post_prompt_seq:
+                first_eos = post_prompt_seq.index(eos_token_id) + prompt_length
+                seq = seq[:first_eos+1]
         trimmed_sequences.append(seq)
 
     # Concatenate per-step logits and probabilities per sample.
@@ -186,11 +192,11 @@ def benchmark_generation(
         print(f"Run {run+1}/{num_runs}: {elapsed:.3f} sec, new tokens per run: {batch_size * (max_new_tokens)} (approx.)")
 
         # sample outputs
-        # for seq in result["sequences"]:
-        #     print("Sample output: -------------------------------------------------")
-        #     print(tokenizer.decode(seq, skip_special_tokens=True))
-        #     print("-------------------------------------------------")
-        #     break
+        for seq in result["sequences"]:
+            print("Sample output: -------------------------------------------------")
+            print(tokenizer.decode(seq, skip_special_tokens=True))
+            print("-------------------------------------------------")
+            break
 
     tokens_per_sec = total_tokens / total_time
     print(f"\nProcessed {total_tokens} tokens in {total_time:.3f} sec, throughput: {tokens_per_sec:.2f} tokens/sec")
@@ -212,14 +218,25 @@ if __name__ == "__main__":
     )
 
     model, tokenizer = get_lora_model(model_name, lora_config)
-    prompt = "Once upon a time, "
+    
+    # messages = [
+    #     # {"role": "system", "content": "You are a question answer bot." },
+    #     {"role": "user", "content": "In one sentence, say whether you love dog or cat more, and give a reason."},
+    # ]
+
+    # prompt = tokenizer.apply_chat_template(messages, tokenize=False)
+    prompt = "In one sentence, say whether you love dog or cat more, and give a reason. Answer:"
 
     generation_config = GenerationConfig(
         temperature=1.0,
-        top_p=1.0,
+        top_p=0.95,
         do_sample=True,
         eos_token_id=tokenizer.eos_token_id,
-        stop_strings=["\n"]
+        stop_strings=["\n", ".\n\n"]
     )
 
-    benchmark_generation(prompt, model, tokenizer, batch_size=32, max_new_tokens=30, generation_config=generation_config, num_runs=10)
+    print("Prompt: -------------------------------------------------")
+    print(prompt)
+    print("-------------------------------------------------")
+
+    benchmark_generation(prompt, model, tokenizer, batch_size=16, max_new_tokens=40, generation_config=generation_config, num_runs=10)

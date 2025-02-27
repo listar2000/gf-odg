@@ -156,11 +156,12 @@ class ReplayBuffer:
 # ---------------------------------------------------------------------
 # Example usage
 if __name__ == "__main__":
-    embedder = SentenceTransformer("bert-base-nli-mean-tokens")
+    cache_dir = "/net/scratch2/listar2000/gfn-od/models/pretrained/sentence_transformer"
+    sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
 
     threshold_for_initial_training = 5
     buffer = ReplayBuffer(
-        embedder,
+        sentence_transformer,
         method="kmeans",   
         threshold=threshold_for_initial_training,         
         n_clusters=2,        
