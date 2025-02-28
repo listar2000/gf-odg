@@ -1,20 +1,19 @@
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 from transformers import AutoTokenizer, GenerationConfig
 from peft import PeftModel, LoraConfig
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import KMeans
 import numpy as np
-from typing import List, Dict, Set, Tuple
+from typing import List, Dict, Tuple
 import os
 import logging
 from tqdm import tqdm
 
 # Local imports
-from model import get_lora_model, generate_sequences_with_logits
+from model import get_lora_model
+from better_generate import generate_sequences_with_logits
 from interceptor import RawTextProcessor
-from state import Concept, ConceptBlock, OpenBlock, EndBlock, StartBlock, AbstractBlock
+from state import Concept, ConceptBlock, OpenBlock, AbstractBlock
 from new_buffer import DiversityReplayBuffer
 
 # Set up logging
@@ -33,34 +32,50 @@ def kl_divergence(p: torch.Tensor, q: torch.Tensor, is_log: bool = False):
     """
     Calculate KL divergence between distributions p and q.
     Adds small epsilon to avoid numerical issues with log(0).
-
+    
     if `is_log` is True, then we assume the input tensors to represent log probabilities.
+    
+    Note: Handles the case where p[i]=0 by using the fact that lim_{p->0} p*log(p/q) = 0
     """
+    epsilon = 1e-10  # Small value to avoid numerical issues
+    
     if is_log:
         # make sure all the elements are <= 0
         assert (p <= 0).all(), "p must be <= 0"
         assert (q <= 0).all(), "q must be <= 0"
-        diffs = p - q # essentially log(p / q)
+        diffs = p - q  # essentially log(p / q)
         return (torch.exp(p) * diffs).sum()
     else:
-        epsilon = 1e-5
-        assert (q > epsilon).all(), f"q must be > {epsilon}"
-        p = p / p.sum()  # Normalize to ensure it sums to 1
-        q = q / q.sum()  # Normalize to ensure it sums to 1
-        return (p * torch.log(p / q)).sum()
+        # Normalize to ensure they sum to 1
+        p = p / p.sum()
+        q = q / q.sum()
+        
+        # Add epsilon to q to avoid division by zero
+        q = q + epsilon
+        q = q / q.sum()  # Renormalize after adding epsilon
+        
+        # Create a mask for p > 0 to handle the case where p[i]=0
+        mask = p > 0
+        
+        # Calculate KL divergence only for non-zero p values
+        # For p[i]=0, the contribution is 0 (lim_{p->0} p*log(p/q) = 0)
+        kl = torch.zeros_like(p)
+        kl[mask] = p[mask] * torch.log(p[mask] / q[mask])
+        
+        return kl.sum()
 
 
 def extract_blocks_from_trajectories(
     trajectories: List[List[AbstractBlock]],
     concept_name: str
-) -> Tuple[List[ConceptBlock], List[OpenBlock]]:
+) -> Tuple[List[ConceptBlock], Dict[str, List[OpenBlock]]]:
     """
     Extract concept blocks and open blocks from trajectories.
     For concept blocks, only extract those with the specified concept name.
     For open blocks, extract those that follow the specified concept.
     """
     concept_blocks = []
-    open_blocks = []
+    open_block_dict = {}
     
     for trajectory in trajectories:
         prev_concept_option = None
@@ -71,9 +86,11 @@ def extract_blocks_from_trajectories(
             elif isinstance(block, OpenBlock) and prev_concept_option is not None and i > 0:
                 # This open block follows a concept block of interest
                 if isinstance(trajectory[i-1], ConceptBlock) and trajectory[i-1].concept.name == concept_name:
-                    open_blocks.append(block)
+                    if open_block_dict.get(prev_concept_option) is None:
+                        open_block_dict[prev_concept_option] = []
+                    open_block_dict[prev_concept_option].append(block)
     
-    return concept_blocks, open_blocks
+    return concept_blocks, open_block_dict
 
 
 def calculate_concept_kl(
@@ -83,22 +100,34 @@ def calculate_concept_kl(
     Calculate the KL divergence between the empirical distribution and a uniform distribution, where the 
     empirical distribution is the distribution of concept options.
     """
-    option_probs = {}
+    # Group blocks by option
+    option_blocks = {}
     for block in concept_blocks:
         option = block.option
-        if option not in option_probs:
-            option_probs[option] = 0
-        option_probs[option] += block.prob
+        if option not in option_blocks:
+            option_blocks[option] = []
+        option_blocks[option].append(block)
     
-    # turn into a torch tensor of probabilities
-    empirical_probs = torch.tensor(list(option_probs.values()))
+    # Sum probabilities for each option while maintaining gradients
+    empirical_probs = []
+    for option, blocks in option_blocks.items():
+        # Sum the probabilities for this option
+        option_prob = sum([block.prob for block in blocks])
+        empirical_probs.append(option_prob)
+    
+    # Stack into a tensor to maintain gradient flow
+    empirical_probs = torch.stack(empirical_probs)
+    
+    # Check if sum is positive
     assert empirical_probs.sum() > 0, "Total probability must be > 0"
+    assert empirical_probs.requires_grad, "Empirical probs must require gradient"
 
+    # Normalize
     empirical_probs = empirical_probs / empirical_probs.sum()
 
-    uniform_probs = torch.ones_like(empirical_probs) / len(empirical_probs)
+    uniform_probs = torch.ones_like(empirical_probs) / len(option_blocks)
     return kl_divergence(empirical_probs, uniform_probs, is_log=False)
-    
+
 
 def calculate_open_block_kl(
     open_blocks: List[OpenBlock],
@@ -111,16 +140,37 @@ def calculate_open_block_kl(
     where U is the uniform distribution.
     """
     assert len(open_blocks) == len(labels), "Number of open blocks and labels must be the same"
-    log_probs = {i: 0 for i in range(n_clusters)}
-    for i, label in enumerate(labels):        
+    
+    # Get device and dtype from the first block for consistency
+    device = open_blocks[0].prob.device
+    dtype = open_blocks[0].prob.dtype
+    
+    # Group blocks by cluster label
+    cluster_blocks = {i: [] for i in range(n_clusters)}
+    for i, label in enumerate(labels):
         # length normalize the log prob from open_block
         log_prob = torch.log(open_blocks[i].prob).mean()
         # turn log prob into a proper prob
-        log_probs[label] += torch.exp(log_prob)
+        prob = torch.exp(log_prob)
+        cluster_blocks[label].append(prob)
+    
+    # Create a tensor of zeros with gradient tracking
+    empirical_probs = []
+    
+    # For each cluster, sum the probabilities and add to the corresponding index
+    for i in range(n_clusters):
+        if cluster_blocks[i]:
+            empirical_probs.append(sum(cluster_blocks[i]))
+        else:
+            empirical_probs.append(torch.tensor(0.0, device=device, dtype=dtype, requires_grad=True))
 
-    empirical_probs = torch.tensor(list(log_probs.values()))
+    empirical_probs = torch.stack(empirical_probs)
+    
+    # Check if sum is positive
     assert empirical_probs.sum() > 0, "Total probability must be > 0"
+    assert empirical_probs.requires_grad, "Empirical probs must require gradient"
 
+    # Normalize
     empirical_probs = empirical_probs / empirical_probs.sum()
 
     uniform_probs = torch.ones_like(empirical_probs) / n_clusters
@@ -177,48 +227,39 @@ def initialize_replay_buffer(
     replay_buffer = DiversityReplayBuffer(
         embedder=sentence_transformer,
         n_clusters=n_clusters,
-        buffer_size=1000,
-        update_clusters_every=100,
-        min_samples_for_clustering=20
+        buffer_size=500,
+        update_clusters_every=20,
+        min_samples_for_clustering=10
     )
     
     # Generate samples in batches
     num_batches = (num_samples + batch_size - 1) // batch_size
     for _ in tqdm(range(num_batches), desc="Generating samples for replay buffer"):
         # Generate sequences
-        sequences, _, _ = generate_sequences_with_logits(
+        generations = generate_sequences_with_logits(
             prompt=prompt,
             model=model,
             tokenizer=tokenizer,
-            batch_size=min(batch_size, num_samples),
+            batch_size=batch_size,
             max_new_tokens=max_new_tokens,
             generation_config=generation_config
         )
         
         # Process sequences into trajectories
         trajectories = []
-        for sequence in sequences:
-            trajectory = text_processor.process_text_to_trajectory(sequence)
+        for sequence in generations["sequences"]:
+            decoded_list = [tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
+            trajectory, idx = text_processor.process_text_to_trajectory(decoded_list)
+            # print(trajectory, idx)
             trajectories.append(trajectory)
         
         # Extract concept blocks and open blocks
-        for i, trajectory in enumerate(trajectories):
-            concept_blocks = [block for block in trajectory if isinstance(block, ConceptBlock) and block.concept.name == concept_name]
-            open_blocks = [block for block in trajectory if isinstance(block, OpenBlock)]
-            
-            # Skip if no concept blocks or open blocks
-            if not concept_blocks or not open_blocks:
-                continue
-            
-            # Add samples to replay buffer
-            for concept_block in concept_blocks:
-                option = concept_block.option
-                for open_block in open_blocks:
-                    replay_buffer.add_samples(
-                        concept_option=option,
-                        texts=[open_block.text],
-                        probs=[open_block.prob] if hasattr(open_block, 'prob') else None
-                    )
+        _, open_block_dict = extract_blocks_from_trajectories(trajectories, concept_name)
+
+        # Add samples to replay buffer
+        for concept_option in open_block_dict:
+            texts = ["".join(block.raw_text) for block in open_block_dict[concept_option]]       
+            replay_buffer.add_samples(concept_option=concept_option, texts=texts)
         
         num_samples -= batch_size
         if num_samples <= 0:
@@ -243,6 +284,7 @@ def train_step(
     max_new_tokens: int = 40,
     w_c: float = 0.5,
     w_o: float = 0.5,
+    n_clusters: int = 5,
     generation_config: GenerationConfig = None
 ) -> Tuple[float, Dict[str, float], Dict[str, Dict[int, float]]]:
     """
@@ -252,7 +294,7 @@ def train_step(
     optimizer.zero_grad()
     
     # Generate sequences
-    sequences, logits, probs = generate_sequences_with_logits(
+    generations = generate_sequences_with_logits(
         prompt=prompt,
         model=model,
         tokenizer=tokenizer,
@@ -262,13 +304,31 @@ def train_step(
     )
     
     # Process sequences into trajectories
-    trajectories = []
-    for sequence in sequences:
-        trajectory = text_processor.process_text_to_trajectory(sequence)
+    trajectories, idxs = [], []
+    for sequence in generations["sequences"]:
+        decoded_list = [tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
+        trajectory, idx = text_processor.process_text_to_trajectory(decoded_list)
         trajectories.append(trajectory)
+        idxs.append(idx)
+
+    # Fill probabilities 
+    fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
+
+    # Extract concept blocks and open blocks
+    concept_blocks, open_block_dict = extract_blocks_from_trajectories(trajectories, concept_name)
+
+    # Calculate concept loss and open block loss
+    concept_loss = calculate_concept_kl(concept_blocks)
+
+    open_block_loss = []
+    for concept_option in open_block_dict:
+        open_blocks = open_block_dict[concept_option]
+        texts = ["".join(block.raw_text) for block in open_blocks]       
+        labels = replay_buffer.add_samples(concept_option=concept_option, texts=texts)
+        assert labels is not None, "Labels must not be None"
+        open_block_loss.append(calculate_open_block_kl(open_blocks, labels, n_clusters=n_clusters))
     
-    # everything here is TODO
-    
+    open_block_loss = sum(open_block_loss)
     # Combine losses
     total_loss = w_c * concept_loss + w_o * open_block_loss
     
@@ -276,7 +336,7 @@ def train_step(
     total_loss.backward()
     optimizer.step()
     
-    return total_loss.item(), concept_distribution, open_block_distribution
+    return concept_loss.item(), open_block_loss.item(), total_loss.item()
 
 
 def train(
@@ -311,7 +371,7 @@ def train(
             top_p=0.95,
             do_sample=True,
             eos_token_id=tokenizer.eos_token_id,
-            stop_strings=["\n", ".\n\n"]
+            stop_strings=["\n", ".\n\n", ".\n"]
         )
     
     # Initialize optimizer
@@ -339,7 +399,7 @@ def train(
         
         for step in range(num_steps_per_epoch):
             # Perform training step
-            loss, concept_distribution, open_block_distribution = train_step(
+            concept_loss, open_block_loss, total_loss = train_step(
                 prompt=prompt,
                 model=model,
                 tokenizer=tokenizer,
@@ -350,18 +410,19 @@ def train(
                 batch_size=batch_size,
                 max_new_tokens=max_new_tokens,
                 w_c=w_c,
-                w_o=w_o
+                w_o=w_o,
+                n_clusters=n_clusters,
+                generation_config=generation_config
             )
             
-            epoch_loss += loss
+            epoch_loss += total_loss
             
             # Log progress
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, Step {step+1}/{num_steps_per_epoch}, Loss: {loss:.4f}")
-            logger.info(f"Concept Distribution: {concept_distribution}")
-            logger.info(f"Open Block Distribution: {open_block_distribution}")
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, Step {step+1}/{num_steps_per_epoch}, Loss: {total_loss:.4f}")
+            logger.info(f"Concept Loss: {concept_loss:.4f}, Open Block Loss: {open_block_loss:.4f}")
             
-            # Generate and log sample outputs every few steps
-            if step % 5 == 0:
+            # Generate and log sample at the end of epoch
+            if step == num_steps_per_epoch - 1:
                 with torch.no_grad():
                     samples = generate_sequences_with_logits(
                         prompt=prompt,
@@ -369,7 +430,6 @@ def train(
                         tokenizer=tokenizer,
                         batch_size=4,
                         max_new_tokens=max_new_tokens,
-                        sampled_only=True,
                         generation_config=generation_config
                     )
                     
@@ -382,9 +442,9 @@ def train(
         logger.info(f"Epoch {epoch+1}/{num_epochs} completed. Average loss: {avg_epoch_loss:.4f}")
         
         # Save model checkpoint
-        checkpoint_dir = os.path.join(output_dir, f"checkpoint-epoch-{epoch+1}")
-        model.save_pretrained(checkpoint_dir)
-        tokenizer.save_pretrained(checkpoint_dir)
+        # checkpoint_dir = os.path.join(output_dir, f"checkpoint-epoch-{epoch+1}")
+        # model.save_pretrained(checkpoint_dir)
+        # tokenizer.save_pretrained(checkpoint_dir)
         
         # Update replay buffer with new embeddings
         # This would involve collecting more samples and updating the embeddings_by_option
@@ -397,16 +457,20 @@ def train(
 
 
 if __name__ == "__main__":
+    # all the paths
+    MODEL_DIR = "/net/scratch2/listar2000/gfn-od/models/"
+    output_dir = MODEL_DIR + "finetuned/train_animal"
+    model_name = MODEL_DIR + "pretrained/Meta-Llama-3-8B-Instruct"
+    cache_dir = MODEL_DIR + "pretrained/sentence_transformer"
+    
     # Example usage
-    prompt = """In one sentence, tell me whether you love dogs or cats more, and give one valid reason.
-Answer: """
+    prompt = "In 20 words, say whether you love dog or cat more, and give a reason; Answer:"
     
     # Define concept
     animal = Concept("animal", ["cat", "dog"], case_variants=["capitalized", "upper", "lower", "plural"])
     text_processor = RawTextProcessor([animal], max_window_size=2)
     
     # Load model and tokenizer
-    model_name = "/net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-Instruct"
     lora_config = LoraConfig(
         r=8,
         lora_alpha=32,
@@ -418,7 +482,6 @@ Answer: """
     model, tokenizer = get_lora_model(model_name, lora_config)
     
     # Load sentence transformer
-    cache_dir = "/net/scratch2/listar2000/gfn-od/models/pretrained/sentence_transformer"
     sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
     
     # Define generation config
@@ -427,7 +490,7 @@ Answer: """
         top_p=0.95,
         do_sample=True,
         eos_token_id=tokenizer.eos_token_id,
-        stop_strings=["\n", ".\n\n"]
+        stop_strings=["\n", ".\n\n", ".\n"]
     )
     
     # Train model
@@ -439,14 +502,14 @@ Answer: """
         sentence_transformer=sentence_transformer,
         concept_name="animal",
         n_clusters=5,
-        batch_size=16,
-        max_new_tokens=40,
+        batch_size=32,
+        max_new_tokens=30,
         num_epochs=5,
         num_steps_per_epoch=10,
-        w_c=0.5,
-        w_o=0.5,
-        learning_rate=5e-5,
-        num_samples=100,
-        output_dir="diversity_model",
+        w_c=0.8,
+        w_o=0.2,
+        learning_rate=1e-4,
+        num_samples=160,
+        output_dir=output_dir,
         generation_config=generation_config
     )

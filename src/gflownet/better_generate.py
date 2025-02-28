@@ -132,6 +132,8 @@ def generate_sequences_with_logits(
             if eos_token_id in post_prompt_seq:
                 first_eos = post_prompt_seq.index(eos_token_id) + prompt_length
                 seq = seq[:first_eos+1]
+        # Exclude prompt tokens from the sequence
+        seq = seq[prompt_length:]
         trimmed_sequences.append(seq)
 
     # Concatenate per-step logits and probabilities per sample.
@@ -185,7 +187,7 @@ def benchmark_generation(
         # Calculate the number of newly generated tokens per sample.
         for seq in result["sequences"]:
             # Subtract prompt length to get new tokens
-            new_tokens = len(seq) - prompt_length
+            new_tokens = len(seq)
             total_tokens += new_tokens
 
         total_time += elapsed

@@ -55,6 +55,7 @@ class DiversityReplayBuffer:
         self,
         concept_option: str,
         texts: List[str],
+        force_update: bool = False
     ) -> np.ndarray:
         """
         Add samples to the buffer for a specific concept option.
@@ -65,7 +66,7 @@ class DiversityReplayBuffer:
             probs: Optional list of probability tensors for each text
         """
         if not texts:
-            return
+            raise ValueError("texts must be non-empty")
             
         # Initialize buffer for this option if it doesn't exist
         if concept_option not in self.option_buffers:
@@ -101,14 +102,17 @@ class DiversityReplayBuffer:
         
         # Update clusters if needed
         if (buffer['update_counter'] >= self.update_clusters_every and 
-            len(buffer['texts']) >= self.min_samples_for_clustering):
+            len(buffer['texts']) >= self.min_samples_for_clustering) or force_update:
             self._update_clusters(concept_option)
             buffer['update_counter'] = 0
 
-        assigned = self.assign_cluster(concept_option, texts)
-        return assigned
+        if buffer['clusters'] is not None:
+            assigned = self.assign_cluster(concept_option, texts)
+            return assigned
+        else:
+            return None
             
-    def _update_clusters(self, concept_option: str) -> None:
+    def _update_clusters(self, concept_option: str, force_update: bool = False) -> None:
         """
         Update clusters for a specific concept option.
         

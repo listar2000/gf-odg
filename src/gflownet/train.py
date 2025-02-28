@@ -123,7 +123,6 @@ def train_single_step(prompt: str, model: PeftModel, tokenizer: AutoTokenizer, \
 
     trajs, idxs = [], []
     for seq in generated["sequences"]:
-        decoded = tokenizer.decode(seq, skip_special_tokens=True)
         decoded_list = [tokenizer.decode(token, skip_special_tokens=True) for token in seq]
         traj, idx = text_processor.process_text_to_trajectory(decoded_list)
         trajs.append(traj)
