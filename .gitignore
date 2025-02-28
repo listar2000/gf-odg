@@ -75,3 +75,7 @@ data/processed/**/
 Thumbs.db
 
 src/gflownet/README.md
+
+wandb/*
+
+src/gflownet/wandb/*

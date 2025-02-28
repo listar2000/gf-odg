@@ -1,181 +1,246 @@
+import torch
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import KMeans, SpectralClustering, DBSCAN
-from typing import Dict, List
+from sklearn.cluster import KMeans
+from typing import List, Dict, Optional
+import logging
 
-class ReplayBuffer:
+logger = logging.getLogger(__name__)
+
+class DiversityReplayBuffer:
+    """
+    A replay buffer specifically designed for diversity training.
+    Maintains separate buffers for different concept options and clusters open-ended responses.
+    """
     def __init__(
         self,
         embedder: SentenceTransformer,
-        method: str = "kmeans",
-        threshold: int = 16 * 10,
-        n_clusters: int = 2,
-        dbscan_eps: float = 0.01,
-        dbscan_min_samples: int = 1,
-        retrain_every: int = 16 * 10
+        n_clusters: int = 5,
+        buffer_size: int = 1000,
+        update_clusters_every: int = 100,
+        min_samples_for_clustering: int = 50,
+        random_state: int = 42
     ):
         """
-        :param embedder: A SentenceTransformer to encode
-        :param method: Which clustering method to use: 'kmeans', 'spectral', or 'dbscan'.
-        :param threshold: Minimum number of embeddings before we train for a block.
-        :param n_clusters: Number of clusters (for kmeans/spectral).
-        :param dbscan_eps: eps parameter for DBSCAN (distance threshold).
-        :param dbscan_min_samples: min_samples parameter for DBSCAN.
-        :param retrain_every: Retrain the clustering every 'retrain_every' calls to update_replay_buffer.
+        Initialize the diversity replay buffer.
+        
+        Args:
+            embedder: SentenceTransformer for embedding text
+            n_clusters: Number of clusters for open-ended responses
+            buffer_size: Maximum size of each buffer
+            update_clusters_every: Update clusters after this many additions
+            min_samples_for_clustering: Minimum number of samples required before clustering
         """
         self.embedder = embedder
-        self.method = method.lower()
-        self.threshold = threshold
         self.n_clusters = n_clusters
-        self.dbscan_eps = dbscan_eps
-        self.dbscan_min_samples = dbscan_min_samples
-        self.retrain_every = retrain_every
-
-        # Store embeddings by block: { "block_name": List[np.ndarray], ... }
-        self.embeddings: Dict[str, List[np.ndarray]] = {}
-
-        # Store clusterers, labels, and cluster_sizes by block
-        self.clusterers = {}
-        self.labels = {}
-        self.cluster_sizes = {}
-
-        # Keep track of which blocks have been trained
-        self.trained_blocks = set()
-
-        # Internal counter to control retraining frequency
-        self.global_step = 0
-
-    def get_embeddings(self, texts: List[str]) -> np.ndarray:
+        self.buffer_size = buffer_size
+        self.update_clusters_every = update_clusters_every
+        self.min_samples_for_clustering = min_samples_for_clustering
+        self.random_state = random_state
+        
+        # Buffers for different concept options
+        # {concept_option: {
+        #     'texts': List[str],
+        #     'embeddings': torch.Tensor,
+        #     'clusters': Optional[KMeans],
+        #     'cluster_centers': Optional[torch.Tensor],
+        #     'update_counter': int
+        # }}
+        self.option_buffers = {}
+        
+        # Device for computations
+        self.device = next(embedder.parameters()).device
+        
+    def add_samples(
+        self,
+        concept_option: str,
+        texts: List[str],
+        prefill: bool = False
+    ) -> np.ndarray:
         """
-        Embed a list of texts and return an array of shape (len(texts), embedding_dim).
+        Add samples to the buffer for a specific concept option.
+        
+        Args:
+            concept_option: The concept option (e.g., 'cat', 'dog')
+            texts: List of open-ended response texts
+            probs: Optional list of probability tensors for each text
         """
-        return self.embedder.encode(texts)
+        if not texts:
+            raise ValueError("texts must be non-empty")
+            
+        # Initialize buffer for this option if it doesn't exist
+        if concept_option not in self.option_buffers:
+            self.option_buffers[concept_option] = {
+                'texts': [],
+                'embeddings': None,
+                'clusters': None,
+                'cluster_centers': None,
+                'update_counter': 0
+            }
+            
+        buffer = self.option_buffers[concept_option]
+        
+        embeddings = self.embedder.encode(texts)
 
-    def update_replay_buffer(self, block: str, texts: List[str]):
-        """
-        High-level method to:
-        1) Add new embeddings for the given 'block'.
-        2) Possibly retrain clusters (if threshold is met and global_step % retrain_every == 0).
-        """
-        self.global_step += len(texts)
-
-        # 1) Add new embeddings
-        if block not in self.embeddings:
-            self.embeddings[block] = []
-        new_emb = self.get_embeddings(texts)
-        new_emb = np.array(new_emb, dtype=np.float64)
-        self.embeddings[block].extend(new_emb)
-
-        # 2) Possibly retrain
-        if (self.global_step % self.retrain_every == 0) and (len(self.embeddings[block]) >= self.threshold):
-            self.train_clusters(block)
-
-    def train_clusters(self, block: str):
-        """
-        Train/update clustering for a given block if threshold is met.
-        - KMeans: direct on embeddings
-        - SpectralClustering: build a similarity matrix from embeddings (cosine or RBF)
-        - DBSCAN: directly on embeddings (Euclidean).
-        """
-        data = np.array(self.embeddings[block])
-        if len(data) < self.threshold:
-            raise ValueError(f"Cannot train clusters for block '{block}' with less than {self.threshold} embeddings.")
-
-        if self.method == "kmeans":
-            clusterer = KMeans(n_clusters=self.n_clusters, random_state=42)
-            labels = clusterer.fit_predict(data)
-
-        elif self.method == "spectral":
-            clusterer = SpectralClustering(
-                n_clusters=self.n_clusters,
-                affinity="rbf",  # scikit-learn computes similarity internally
-                random_state=42
-            )
-            labels = clusterer.fit_predict(data)
-
-        elif self.method == "dbscan":
-            clusterer = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples)
-            labels = clusterer.fit_predict(data)
+        # Add to buffer
+        buffer['texts'].extend(texts)
+        
+        # Update embeddings tensor
+        if buffer['embeddings'] is None:
+            buffer['embeddings'] = embeddings
         else:
-            raise ValueError(f"Unknown clustering method: {self.method}")
+            # buffer['embeddings'] = torch.cat([buffer['embeddings'], embeddings], dim=0)
+            buffer['embeddings'] = np.concatenate([buffer['embeddings'], embeddings], axis=0)
+            
+        # Trim buffer if it exceeds maximum size
+        if len(buffer['texts']) > self.buffer_size:
+            buffer['texts'] = buffer['texts'][-self.buffer_size:]
+            buffer['embeddings'] = buffer['embeddings'][-self.buffer_size:]
+            
+        # Update counter
+        buffer['update_counter'] += len(texts)
+        
+        flag_1 = (buffer['update_counter'] >= self.update_clusters_every and 
+            len(buffer['texts']) >= self.min_samples_for_clustering)
+        flag_2 = (buffer['clusters'] is None)
+        # Update clusters if needed
+        if (flag_1 or flag_2) and not prefill:
+            self._update_clusters(concept_option)
+            buffer['update_counter'] = 0
 
-        # Save the clusterer & labels
-        self.clusterers[block] = clusterer
-        self.labels[block] = labels
-
-        # Compute cluster sizes as {label -> count}
-        unique_labels, counts = np.unique(labels, return_counts=True)
-        cluster_size_dict = dict(zip(unique_labels, counts))
-        self.cluster_sizes[block] = cluster_size_dict
-
-        self.trained_blocks.add(block)
-
-    def get_probability(self, block: str, text: str) -> float:
-        """
-        Probability = (# points in assigned cluster) / (sum of points in all clusters)
-
-        For KMeans: we use clusterer.predict().
-        For SpectralClustering / DBSCAN: scikit-learn does not provide .predict().
-          => We do a nearest-neighbor approach to figure out the cluster label:
-             1) Find the nearest embedding in 'block'.
-             2) Use that embedding's label.
-
-        If block not trained, return None.
-        """
-        if block not in self.trained_blocks:
-            # Not trained => cannot produce probability
+        if buffer['clusters'] is not None:
+            assigned = self.assign_cluster(concept_option, texts)
+            return assigned
+        else:
             return None
+            
+    def _update_clusters(self, concept_option: str) -> None:
+        """
+        Update clusters for a specific concept option.
+        
+        Args:
+            concept_option: The concept option to update clusters for
+        """
+        buffer = self.option_buffers[concept_option]
+        
+        # Skip if not enough samples
+        if len(buffer['texts']) < self.min_samples_for_clustering:
+            return
+            
+        # Convert embeddings to numpy for sklearn
+        embeddings_np = buffer['embeddings']
+        
+        # Fit KMeans
+        kmeans = KMeans(n_clusters=self.n_clusters, random_state=self.random_state)
+        kmeans.fit(embeddings_np)
+        
+        # Store clusters and centers
+        buffer['clusters'] = kmeans
+        buffer['cluster_centers'] = kmeans.cluster_centers_
+        
+        self.random_state += 1 # For next time
+        logger.info(f"Updated clusters for concept option '{concept_option}' with {len(buffer['texts'])} samples")
 
-        # Single-embed the text
-        e = np.array(self.get_embeddings([text])[0]  , dtype=np.float64)
-        labels = self.labels[block]
-        data = np.array(self.embeddings[block])
-        clusterer = self.clusterers[block]
-        cluster_size_dict = self.cluster_sizes[block]
 
-        # Sum of all clusters (including label=-1 if DBSCAN)
-        total_points = sum(cluster_size_dict.values())
+    def assign_cluster(self, concept_option: str, texts: List[str]) -> np.ndarray:
+        """
+        For a batch of texts, return a Long tensor of the assigned clusters, 
+        where the i-th element is the cluster ID for the i-th text (between 0 and n_clusters-1).
+        
+        Args:
+            concept_option: The concept option
+            texts: The texts to assign clusters to
+            
+        Returns:
+            Cluster IDs for the texts
+        """
+        if concept_option not in self.option_buffers:
+            raise ValueError(f"Concept option '{concept_option}' not found")
+            
+        buffer = self.option_buffers[concept_option]
+        
+        if buffer['clusters'] is None:
+            raise ValueError(f"KMeans has not been trained yet for '{concept_option}'")
+            
+        # Embed the texts, the output is already a 2D ndarray of size (num_inputs, output_dimension)
+        embeddings = self.embedder.encode(texts)
+            
+        # Predict cluster
+        labels = buffer['clusters'].predict(embeddings)
+        
+        return labels
+        
+    def get_cluster_centers(self, concept_option: str) -> Optional[np.ndarray]:
+        """
+        Get cluster centers for a specific concept option.
+        
+        Args:
+            concept_option: The concept option
+            
+        Returns:
+            Numpy array of cluster centers or None if not available
+        """
+        if concept_option not in self.option_buffers:
+            return None
+            
+        return self.option_buffers[concept_option].get('cluster_centers')
+        
+    def get_stats(self) -> Dict[str, Dict]:
+        """
+        Get statistics about the buffer.
+        
+        Returns:
+            Dictionary with buffer statistics
+        """
+        stats = {}
+        
+        for option, buffer in self.option_buffers.items():
+            stats[option] = {
+                'num_samples': len(buffer['texts']),
+                'clustered': buffer['clusters'] is not None,
+            }
+            
+            if buffer['clusters'] is not None:
+                embeddings_np = buffer['embeddings']
+                labels = buffer['clusters'].predict(embeddings_np)
+                unique_labels, counts = np.unique(labels, return_counts=True)
+                stats[option]['cluster_counts'] = dict(zip(unique_labels.tolist(), counts.tolist()))
 
-        # 1) If KMeans, we can directly predict
-        if isinstance(clusterer, KMeans):
-            label = clusterer.predict([e])[0]
-        # 2) Otherwise, nearest-neighbor approach
-        else:
-            # Calculate Euclidean distances to training embeddings in 'block'
-            diffs = data - e
-            dists = np.sum(diffs**2, axis=1)  # shape (N,)
-            nearest_idx = np.argmin(dists)
-            label = labels[nearest_idx]
-
-        # Probability = cluster_size[label] / total_points
-        cluster_count = cluster_size_dict.get(label, 0)
-        prob = cluster_count / float(total_points) if total_points > 0 else 0.0
-        return prob
+                # add some sample text for each cluster in the current buffer
+                stats[option]['cluster_samples'] = {i: None for i in range(buffer['clusters'].n_clusters)}
+                for i in range(buffer['clusters'].n_clusters):
+                    for j, text in enumerate(buffer['texts']):
+                        if labels[j] == i:
+                            stats[option]['cluster_samples'][i] = text
+                            break
+        return stats
 
 
-# ---------------------------------------------------------------------
-# Example usage
 if __name__ == "__main__":
     cache_dir = "/net/scratch2/listar2000/gfn-od/models/pretrained/sentence_transformer"
     sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
 
-    threshold_for_initial_training = 5
-    buffer = ReplayBuffer(
-        sentence_transformer,
-        method="kmeans",   
-        threshold=threshold_for_initial_training,         
-        n_clusters=2,        
-        retrain_every=  5
-    )
+    buffer = DiversityReplayBuffer(sentence_transformer, n_clusters=2, buffer_size=20, update_clusters_every=2, min_samples_for_clustering=3)
 
-    new_texts = [f"Example text {-1}-{j}" for j in range(5)]
-    buffer.update_replay_buffer("first block", new_texts)
+    print("Transformers device:", sentence_transformer.device)
+    
+    concept = "animal"
+    initial_texts = ["Dogs are cute", "Cats are cute", "Dogs are friendly", "Kittens are friendly", "Puppies are cute"]
+    buffer.add_samples(concept, initial_texts)
+    
+    animals = {"Dogs", "Cats", "Puppies", "Kittens"}
+    adjectives = {"cute", "friendly"}
 
-    for i in range(8):
-        new_texts = [f"Example text {i}-{j}" for j in range(5)]
-        buffer.update_replay_buffer("first block", new_texts)
+    stats = buffer.get_stats()
 
-        sample_text = "A sample text to test probability"
-        prob = buffer.get_probability("first block", sample_text)
-        print(f"Iteration {i}, Probability for sample text => {prob}")
-        print("Cluster sizes:", buffer.cluster_sizes.get("first block", None))
+    import random
+    for i in range(10):
+        new_texts = [f"{random.choice(list(animals))} are {random.choice(list(adjectives))}" for _ in range(3)]
+        assigned = buffer.add_samples(concept, new_texts)
+        
+        stats = buffer.get_stats()
+        for i in range(len(new_texts)):
+            print(str(assigned[i].item()) + " => " + new_texts[i])
+
+        print(stats)
+
