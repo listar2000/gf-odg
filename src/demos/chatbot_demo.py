@@ -11,13 +11,12 @@ from omegaconf import DictConfig
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, logging
 from peft import PeftModel
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich.markdown import Markdown
-from rich.live import Live
-from rich.spinner import Spinner
+
 
 # Disable tokenizer warnings
 logging.set_verbosity_error()
@@ -44,7 +43,6 @@ class Chatbot:
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_cfg.model.pretrained_path,
                 torch_dtype=torch.bfloat16,
-                attn_implementation="eager",
                 device_map="auto",
                 local_files_only=True
             )
@@ -61,8 +59,8 @@ class Chatbot:
             # Load LoRA weights if requested
             if use_finetuned:
                 adapter_path = Prompt.ask(
-                    "[bold yellow]Please enter the path to the LoRA adapter",
-                    default="/net/scratch2/listar2000/gfn-od/models/finetuned/gemma-2b-career/checkpoint-800"
+                    "[bold yellow]Please enter the path to the LoRA adapter:",
+                    default="/net/scratch2/listar2000/gfn-od/models/finetuned/train_animal/w_o_0.9"
                 )
 
                 self.console.print(
@@ -117,7 +115,8 @@ class Chatbot:
             self.display_message("Human", user_input, "yellow")
 
             # Format prompt and generate response
-            prompt = self.format_prompt(user_input)
+            # prompt = self.format_prompt(user_input)
+            prompt = user_input
             inputs = self.tokenizer(
                 prompt, return_tensors="pt").to(self.model.device)
 
@@ -126,12 +125,14 @@ class Chatbot:
                 with torch.no_grad():
                     outputs = self.model.generate(
                         **inputs,
-                        max_new_tokens=512,
-                        temperature=0.7,
-                        top_p=0.9,
+                        max_new_tokens=40,
+                        temperature=1.0,
+                        top_p=0.95,
                         repetition_penalty=1.1,
                         do_sample=True,
                         pad_token_id=self.tokenizer.pad_token_id,
+                        stop_strings=["\n", ".\n\n", ".\n"],
+                        tokenizer=self.tokenizer
                     )
 
                 # Decode and format response

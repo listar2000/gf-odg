@@ -43,6 +43,8 @@ class DiversityConfig:
     """Configuration for diversity training."""
     concept_name: str
     n_clusters: int = 5
+    max_n_clusters: int = 10
+    fixed_n_clusters: bool = False
     w_c: float = 0.5  # Weight for concept loss
     w_o: float = 0.5  # Weight for open block loss
     num_samples: int = 100  # Number of samples for initializing replay buffer
@@ -283,6 +285,8 @@ def initialize_replay_buffer(
     replay_buffer = DiversityReplayBuffer(
         embedder=model_config.sentence_transformer,
         n_clusters=diversity_config.n_clusters,
+        max_n_clusters=diversity_config.max_n_clusters,
+        fixed_n_clusters=diversity_config.fixed_n_clusters,
         buffer_size=diversity_config.buffer_size,
         update_clusters_every=diversity_config.update_clusters_every,
         min_samples_for_clustering=diversity_config.min_samples_for_clustering
@@ -385,7 +389,8 @@ def train_step(
         texts = ["".join(block.raw_text) for block in open_blocks]       
         labels = replay_buffer.add_samples(concept_option=concept_option, texts=texts)
         assert labels is not None, "Labels must not be None"
-        open_block_loss.append(calculate_open_block_kl(open_blocks, labels, n_clusters=diversity_config.n_clusters))
+        n_clusters = replay_buffer.get_n_clusters(concept_option)
+        open_block_loss.append(calculate_open_block_kl(open_blocks, labels, n_clusters=n_clusters))
     
     open_block_loss = sum(open_block_loss)
     # Combine losses
@@ -581,20 +586,27 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a model for diverse text generation")
     
     # Model and tokenizer arguments
-    parser.add_argument("--model_name_or_path", type=str, default="gpt2", help="Model name or path")
+    MODEL_PATH_DEFAULT = "/net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-Instruct"
+    PROMPT_DEFAULT ="In 20 words, say whether you love dog or cat more, and give a reason; Answer:"
+    BASE_OUTPUT_DIR="/net/scratch2/listar2000/gfn-od/models/finetuned/train_animal"
+
+    parser.add_argument("--model_name_or_path", type=str, default=MODEL_PATH_DEFAULT, help="Model name or path")
     parser.add_argument("--lora_r", type=int, default=16, help="LoRA r dimension")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha parameter")
     parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout rate")
     
     # Text generation arguments
-    parser.add_argument("--prompt", type=str, default="The animal", help="Prompt for text generation")
+    parser.add_argument("--prompt", type=str, default=PROMPT_DEFAULT, help="Prompt for text generation")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size for generation")
     parser.add_argument("--max_new_tokens", type=int, default=30, help="Maximum number of new tokens to generate")
     
     # Diversity config arguments
     parser.add_argument("--concept_name", type=str, default="animal", help="Name of the concept to diversify")
     parser.add_argument("--n_clusters", type=int, default=5, help="Number of clusters for diversity")
+    parser.add_argument("--max_n_clusters", type=int, default=10, help="Maximum number of clusters for diversity")
+    parser.add_argument("--fixed_n_clusters", type=bool, default=False, help="Whether to fix the number of clusters")
     parser.add_argument("--num_samples", type=int, default=320, help="Number of samples for initializing replay buffer")
+    
     parser.add_argument("--w_c", type=float, default=0.8, help="Weight for concept loss")
     parser.add_argument("--w_o", type=float, default=0.2, help="Weight for open block loss")
     parser.add_argument("--buffer_size", type=int, default=500, help="Maximum size of the replay buffer")
@@ -608,7 +620,7 @@ if __name__ == "__main__":
     parser.add_argument("--final_learning_rate", type=float, default=3e-5, help="Final learning rate")
     parser.add_argument("--warmup_steps", type=int, default=0, help="Number of warmup steps")
     parser.add_argument("--lr_scheduler_type", type=str, default="cosine", choices=["cosine", "linear", "constant"], help="Type of learning rate scheduler")
-    parser.add_argument("--output_dir", type=str, default="diversity_model", help="Directory to save the model")
+    parser.add_argument("--output_dir", type=str, default=BASE_OUTPUT_DIR + "/tmp", help="Directory to save the model")
     
     # Wandb config arguments
     parser.add_argument("--use_wandb", action="store_true", help="Whether to use Weights & Biases for logging")
@@ -626,12 +638,16 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     # Load model and tokenizer
-    model, tokenizer, text_processor, sentence_transformer = get_lora_model(
+    model, tokenizer, sentence_transformer = get_lora_model(
         model_name_or_path=args.model_name_or_path,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout
     )
+
+    # Create text processor with animal concept
+    animal = Concept("animal", ["cat", "dog"], case_variants=["capitalized", "lower", "plural"])
+    text_processor = RawTextProcessor([animal], max_window_size=2)
     
     # Set up generation config
     generation_config = GenerationConfig(

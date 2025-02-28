@@ -48,14 +48,10 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     
-    # Create text processor with animal concept
-    animal = Concept("animal", ["cat", "dog"], case_variants=["capitalized", "upper", "lower", "plural"])
-    text_processor = RawTextProcessor([animal], max_window_size=2)
-    
     # Load sentence transformer
     sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
     
-    return model, tokenizer, text_processor, sentence_transformer
+    return model, tokenizer, sentence_transformer
 
 
 if __name__ == "__main__":
