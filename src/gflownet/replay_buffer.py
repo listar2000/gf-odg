@@ -138,8 +138,10 @@ class DiversityReplayBuffer:
         cluster_counts = {i: 0 for i in range(n_clusters)}
         
         global_counter = 0
+
+        zipped = list(zip(buffer['texts'], buffer['embeddings'], labels))
         # Loop through samples in FIFO order (or keep an index ordering)
-        for text, emb, label in reversed(zip(buffer['texts'], buffer['embeddings'], labels)):
+        for text, emb, label in reversed(zipped):
             if cluster_counts[label] < quota:
                 new_texts.append(text)
                 new_embeddings.append(emb)

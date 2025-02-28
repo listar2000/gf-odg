@@ -23,17 +23,17 @@ for w_o in "${W_O_VALUES[@]}"; do
     w_c=$(echo "1.0 - $w_o" | bc)
     
     # Create a unique output directory and run name based on the w_o value
-    output_dir="${BASE_OUTPUT_DIR}/w_o_${w_o}"
-    run_name="train_animal_w_o_${w_o}"
+    output_dir="${BASE_OUTPUT_DIR}/second_w_o_${w_o}"
+    run_name="second_animal_w_o_${w_o}"
     
     # Create the job script
     job_script=$(mktemp)
     
     cat > "$job_script" << EOL
 #!/bin/bash
-#SBATCH --job-name=train_w_o_${w_o}
-#SBATCH --output=${BASE_OUTPUT_DIR}/logs/train_w_o_${w_o}_%j.out
-#SBATCH --error=${BASE_OUTPUT_DIR}/logs/train_w_o_${w_o}_%j.err
+#SBATCH --job-name=${run_name}
+#SBATCH --output=${BASE_OUTPUT_DIR}/logs/${run_name}_%j.out
+#SBATCH --error=${BASE_OUTPUT_DIR}/logs/${run_name}_%j.err
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=${SLURM_CPUS}
 #SBATCH --mem=${SLURM_MEM}
