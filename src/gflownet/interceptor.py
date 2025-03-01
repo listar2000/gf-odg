@@ -4,7 +4,7 @@ import collections
 
 
 class RawTextProcessor:
-    def __init__(self, concepts: List[Concept], max_window_size: int = 5):
+    def __init__(self, concepts: List[Concept], max_window_size: int = 5, only_concepts: bool = False):
         """Process a sequence of decoded tokens into blocks
 
         Args:
@@ -12,38 +12,46 @@ class RawTextProcessor:
         """
         self.concepts = {concept.name: concept for concept in concepts}
         self.max_window_size = max_window_size
+        self.only_concepts = only_concepts
 
     def process_text_to_trajectory(self, raw_text: List[str]) -> List[AbstractBlock]:
-        concepts_to_check = set(self.concepts.keys())
+        concepts_to_check = list(self.concepts.keys())  # Changed from set to list
         blocks = []
-        # track the index of the start of each block
         block_indices = []
 
         open_buffer = []
         window = collections.deque(maxlen=self.max_window_size)
-        
+
         for i, token in enumerate(raw_text):
             # Check every suffix ending with the new token
             window.append(token)
             open_buffer.append(token)
-            concept_block, L = self.detect_concepts(window, concepts_to_check)
-            if concept_block is not None: # matched
-                concepts_to_check.remove(concept_block.concept.name)
-                window.clear()
-                buffer_flushed = open_buffer[:-L]
-                if buffer_flushed:
-                    block_indices.append(i - len(open_buffer) + 1)
-                    blocks.append(OpenBlock(0, buffer_flushed))
-                blocks.append(concept_block)
-                block_indices.append(i - L + 1)
-                open_buffer = []
 
-        # flush the buffer
-        if open_buffer:
+            for concept in concepts_to_check:  # Iterate in order
+                concept_block, L = self.detect_concepts(window, [concept])
+                if concept_block is not None:  # Matched
+                    concepts_to_check.remove(concept)  # Remove in order
+                    window.clear()
+                    
+                    if not self.only_concepts:  # Skip OpenBlocks if only_concepts is True
+                        buffer_flushed = open_buffer[:-L]
+                        if buffer_flushed:
+                            block_indices.append(i - len(open_buffer) + 1)
+                            blocks.append(OpenBlock(0, buffer_flushed))
+
+                    blocks.append(concept_block)
+                    block_indices.append(i - L + 1)
+                    open_buffer = []
+                    break  # Exit the loop after detecting one concept
+
+        # Flush the buffer if `only_concepts` is False
+        if open_buffer and not self.only_concepts:
             block_indices.append(len(raw_text) - len(open_buffer))
             blocks.append(OpenBlock(0, open_buffer))
 
-        return blocks, block_indices   
+        return blocks, block_indices
+
+   
 
     def detect_concepts(self, window: collections.deque, concepts_to_check: set[str]) -> Optional[str]:
         window_list = list(window)
@@ -64,19 +72,14 @@ class RawTextProcessor:
 if __name__ == "__main__":
     import time
 
-    animal = Concept("animal", ["cat", "dog"], case_variants=["capitalized", "upper"])
-    color = Concept("color", ["red", "blue"], case_variants=["capitalized", "upper"])
-    raw_text = ["we", " love", " animal", " like", " cat", " since", " it", " is", " a", " red", "."] * 2
-    processor = RawTextProcessor([animal, color], max_window_size=2)
+    ListOfFlowerNames = ["Cosmos", "Cornflower", "Dahlia", "Zinnia", "Chrysanthemum", "Celosia", "Larkspur", "Gladiolus", "Craspedia", "Gomphrena", "Sunflower", "Gerbera Daisy", "Snapdragon", "Bells of Ireland", "Stock", "Strawflower", "Nigella", "Nicotiana", "Nasturtium", "Petunia", "Marigold", "Impatiens", "Pansy", "Sweet Alyssum", "Morning Glory", "Coneflower", "Black-Eyed Susan", "Hosta", "Peony", "Daylily", "Lavender", "Phlox", "Shasta Daisy", "Bleeding Heart", "Iris", "Hellebore", "Yarrow", "Salvia", "Veronica", "Gaillardia", "Coreopsis", "Columbine", "Lupine", "Delphinium", "Astilbe", "Foxglove", "Hollyhock", "Sweet William", "Canterbury Bells", "Forget-Me-Not", "Evening Primrose", "Honesty", "Parsley", "Angelica", "Rose", "Tulip", "Orchid", "Lily", "Hydrangea", "Carnation", "Freesia", "Ranunculus", "Anemone", "Gardenia", "Azalea", "Camellia", "Jasmine", "Magnolia", "Bougainvillea"]
+    
+    # Create text processor with N flower concept
+    N_Concepts = 4
+    flowers = [Concept(f"flower{i+1}", ListOfFlowerNames, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
+    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts)
+    raw_text = ["Rose", "Cornflower", "Dahlia", "Dahlia",","] 
 
-    iterations = 10000
-    start_time = time.time()
-
-    for _ in range(iterations):
-        processor.process_text_to_trajectory(raw_text)
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-
-    print(f"Processing time for {iterations} iterations: {elapsed_time:.4f} seconds")
-
+    blocks, s = text_processor.process_text_to_trajectory(raw_text)
+    print(blocks)
+    print(s)
