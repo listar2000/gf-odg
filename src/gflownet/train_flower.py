@@ -19,7 +19,6 @@ from model import get_lora_model
 from better_generate import generate_sequences_with_logits
 from interceptor import RawTextProcessor
 from state import Concept, ConceptBlock, OpenBlock, AbstractBlock
-from replay_buffer import DiversityReplayBuffer
 
 # Define dataclasses for parameter groups
 @dataclass
@@ -120,34 +119,6 @@ def kl_divergence(p: torch.Tensor, q: torch.Tensor, is_log: bool = False):
         return kl.sum()
 
 
-def extract_blocks_from_trajectories(
-    trajectories: List[List[AbstractBlock]],
-    concept_name: str
-) -> Tuple[List[ConceptBlock], Dict[str, List[OpenBlock]]]:
-    """
-    Extract concept blocks and open blocks from trajectories.
-    For concept blocks, only extract those with the specified concept name.
-    For open blocks, extract those that follow the specified concept.
-    """
-    concept_blocks = []
-    open_block_dict = {}
-    
-    for trajectory in trajectories:
-        prev_concept_option = None
-        for i, block in enumerate(trajectory):
-            if isinstance(block, ConceptBlock) and block.concept.name == concept_name:
-                concept_blocks.append(block)
-                prev_concept_option = block.option
-            elif isinstance(block, OpenBlock) and prev_concept_option is not None and i > 0:
-                # This open block follows a concept block of interest
-                if isinstance(trajectory[i-1], ConceptBlock) and trajectory[i-1].concept.name == concept_name:
-                    if open_block_dict.get(prev_concept_option) is None:
-                        open_block_dict[prev_concept_option] = []
-                    open_block_dict[prev_concept_option].append(block)
-    
-    return concept_blocks, open_block_dict
-
-
 def calculate_concept_kl(
     concept_blocks: List[ConceptBlock]
 ) -> torch.Tensor:
@@ -184,160 +155,28 @@ def calculate_concept_kl(
     return kl_divergence(empirical_probs, uniform_probs, is_log=False)
 
 
-def calculate_open_block_kl(
-    open_blocks: List[OpenBlock],
-    labels: np.ndarray,
-    n_clusters: int,
-) -> torch.Tensor:
-    """
-    Calculate the open block loss as described in the README.
-    L_o = sum_{i=1}^K P[semantic class i] * KL(P[semantic class i] || U)
-    where U is the uniform distribution.
-    """
-    assert len(open_blocks) == len(labels), "Number of open blocks and labels must be the same"
-    
-    # Get device and dtype from the first block for consistency
-    device = open_blocks[0].prob.device
-    dtype = open_blocks[0].prob.dtype
-    
-    # Group blocks by cluster label
-    cluster_blocks = {i: [] for i in range(n_clusters)}
-    for i, label in enumerate(labels):
-        # length normalize the log prob from open_block
-        log_prob = torch.log(open_blocks[i].prob).mean()
-        # turn log prob into a proper prob
-        prob = torch.exp(log_prob)
-        cluster_blocks[label].append(prob)
-    
-    # Create a tensor of zeros with gradient tracking
-    empirical_probs = []
-    
-    # For each cluster, sum the probabilities and add to the corresponding index
-    for i in range(n_clusters):
-        if cluster_blocks[i]:
-            empirical_probs.append(sum(cluster_blocks[i]))
-        else:
-            empirical_probs.append(torch.tensor(0.0, device=device, dtype=dtype, requires_grad=True))
-
-    empirical_probs = torch.stack(empirical_probs)
-    
-    # Check if sum is positive
-    assert empirical_probs.sum() > 0, "Total probability must be > 0"
-    assert empirical_probs.requires_grad, "Empirical probs must require gradient"
-
-    # Normalize
-    empirical_probs = empirical_probs / empirical_probs.sum()
-
-    uniform_probs = torch.ones_like(empirical_probs) / n_clusters
-    return kl_divergence(empirical_probs, uniform_probs, is_log=False)
-
 def fill_blocks_with_probs(
     trajectories: List[List[AbstractBlock]],
-    idxs: List[List[int]],
+    idxs: List[List[Tuple[int, int]]],
     raw_probs: List[torch.Tensor]
 ) -> None:
     """
-    Fill blocks with probabilities from the raw probabilities.
+    Fill ConceptBlocks with probabilities from the raw probabilities.
     This modifies the blocks in-place.
     """
-    for i, (trajectory, idx, prob) in enumerate(zip(trajectories, idxs, raw_probs)):
-        for j in range(len(idx)):
-            if j < len(idx) - 1:
-                start, end = idx[j], idx[j + 1]
-            else:
-                start, end = idx[j], len(prob)
-            
+    for trajectory, idx_pairs, prob in zip(trajectories, idxs, raw_probs):
+        for j, (start, end) in enumerate(idx_pairs):
             if j < len(trajectory):
                 block = trajectory[j]
-                if isinstance(block, ConceptBlock) or isinstance(block, OpenBlock):
-                    # For ConceptBlock, we use the product of probabilities
-                    if isinstance(block, ConceptBlock):
-                        block.prob = torch.prod(prob[start:end])
-                    # For OpenBlock, we store the raw probabilities
-                    else:
-                        block.prob = prob[start:end]
-
-
-@torch.no_grad()
-def initialize_replay_buffer(
-    model_config: ModelConfig,
-    gen_config: TextGenerationConfig,
-    diversity_config: DiversityConfig
-) -> DiversityReplayBuffer:
-    """
-    Initialize the replay buffer with samples from the model.
-    
-    Args:
-        model_config: Configuration for model and tokenizer
-        gen_config: Configuration for text generation
-        diversity_config: Configuration for diversity training
-            - concept_name: Name of the concept to diversify
-            - n_clusters: Number of clusters for diversity
-            - num_samples: Number of samples to generate
-            - buffer_size: Maximum size of the replay buffer
-            - update_clusters_every: Update clusters every N samples
-            - min_samples_for_clustering: Minimum samples required for clustering
-    """
-    logging.info(f"Initializing replay buffer with {diversity_config.num_samples} samples")
-    
-    # Create the replay buffer
-    replay_buffer = DiversityReplayBuffer(
-        embedder=model_config.sentence_transformer,
-        n_clusters=diversity_config.n_clusters,
-        max_n_clusters=diversity_config.max_n_clusters,
-        fixed_n_clusters=diversity_config.fixed_n_clusters,
-        buffer_size=diversity_config.buffer_size,
-        update_clusters_every=diversity_config.update_clusters_every,
-        min_samples_for_clustering=diversity_config.min_samples_for_clustering
-    )
-    
-    # Generate samples in batches
-    num_batches = (diversity_config.num_samples + gen_config.batch_size - 1) // gen_config.batch_size
-    for _ in tqdm(range(num_batches), desc="Generating samples for replay buffer"):
-        # Generate sequences
-        generations = generate_sequences_with_logits(
-            prompt=gen_config.prompt,
-            model=model_config.model,
-            tokenizer=model_config.tokenizer,
-            batch_size=gen_config.batch_size,
-            max_new_tokens=gen_config.max_new_tokens,
-            generation_config=gen_config.generation_config
-        )
-        
-        # Process sequences into trajectories
-        trajectories = []
-        for sequence in generations["sequences"]:
-            decoded_list = [model_config.tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
-            trajectory, idx = model_config.text_processor.process_text_to_trajectory(decoded_list)
-            # print(trajectory, idx)
-            trajectories.append(trajectory)
-        
-        # Extract concept blocks and open blocks
-        _, open_block_dict = extract_blocks_from_trajectories(trajectories, diversity_config.concept_name)
-
-        # Add samples to replay buffer
-        for concept_option in open_block_dict:
-            texts = ["".join(block.raw_text) for block in open_block_dict[concept_option]] 
-            # Prefilling, no need to cluster now.      
-            replay_buffer.add_samples(concept_option=concept_option, texts=texts, prefill=True)
-        
-        diversity_config.num_samples -= gen_config.batch_size
-        if diversity_config.num_samples <= 0:
-            break
-    
-    # Log buffer statistics
-    stats = replay_buffer.get_stats()
-    logging.info(f"Replay buffer initialized with statistics: {stats}")
-    
-    return replay_buffer
-
+                if isinstance(block, ConceptBlock):  
+                    # For ConceptBlock, use the product of probabilities
+                    block.prob = torch.prod(prob[start:end])
 
 def train_step(
     model_config: ModelConfig,
     gen_config: TextGenerationConfig,
     diversity_config: DiversityConfig,
-    optimizer: torch.optim.Optimizer,
-    replay_buffer: DiversityReplayBuffer
+    optimizer: torch.optim.Optimizer
 ) -> Tuple[float, float, float]:
     """
     Perform a single training step.
@@ -347,7 +186,6 @@ def train_step(
         gen_config: Configuration for text generation
         diversity_config: Configuration for diversity training
         optimizer: Optimizer for model parameters
-        replay_buffer: Replay buffer for diversity training
         
     Returns:
         Tuple of (concept_loss, open_block_loss, total_loss) as float values
@@ -372,24 +210,23 @@ def train_step(
         trajectory, idx = model_config.text_processor.process_text_to_trajectory(decoded_list)
         trajectories.append(trajectory)
         idxs.append(idx)
-
+    
     # Fill probabilities 
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
 
-    # Extract concept blocks and open blocks
-    concept_blocks, _ = extract_blocks_from_trajectories(trajectories, diversity_config.concept_name)
+    # All blocks in the trajectories are concept blocks
+    concept_blocks = trajectories
 
     # Calculate concept loss and open block loss
     concept_loss = calculate_concept_kl(concept_blocks)
 
-    # Combine losses
-    total_loss = diversity_config.w_c * concept_loss
+    total_loss = concept_loss
     
     # Backpropagate
     total_loss.backward()
     optimizer.step()
     
-    return concept_loss.item(), _, total_loss.item()
+    return concept_loss.item(), None, total_loss.item()
 
 
 def train(
@@ -471,13 +308,6 @@ def train(
         # Constant learning rate (no scheduler)
         scheduler = None
     
-    # Initialize replay buffer
-    replay_buffer = initialize_replay_buffer(
-        model_config=model_config,
-        gen_config=gen_config,
-        diversity_config=diversity_config
-    )
-    
     # Training loop
     logger.info("Starting training...")
     for epoch in range(training_config.num_epochs):
@@ -489,8 +319,7 @@ def train(
                 model_config=model_config,
                 gen_config=gen_config,
                 diversity_config=diversity_config,
-                optimizer=optimizer,
-                replay_buffer=replay_buffer
+                optimizer=optimizer
             )
             
             epoch_loss += total_loss
@@ -614,7 +443,7 @@ if __name__ == "__main__":
     # Wandb config arguments
     parser.add_argument("--use_wandb", action="store_true", help="Whether to use Weights & Biases for logging")
     parser.add_argument("--wandb_project", type=str, default="gfn-diversity", help="Weights & Biases project name")
-    parser.add_argument("--wandb_name", type=str, default="train_animal", help="Weights & Biases run name")
+    parser.add_argument("--wandb_name", type=str, default="train_flower", help="Weights & Biases run name")
     
     args = parser.parse_args()
     

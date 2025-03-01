@@ -186,7 +186,6 @@ def replay_buffer_setup(
             collected_samples += len(open_texts)
             print(f"Collected {collected_samples}/{num_warmup_samples} OpenBlock samples for ReplayBuffer.")
 
-
     if "open_block" in buffer.embeddings and len(buffer.embeddings["open_block"]) >= buffer.threshold:
         buffer.train_clusters("open_block")
 

@@ -23,8 +23,8 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
         sentence_transformer: A sentence transformer for embedding text
     """
     # Set up paths
-    MODEL_DIR = "/net/scratch2/listar2000/gfn-od/models/"
-    cache_dir = MODEL_DIR + "pretrained/sentence_transformer"
+    MODEL_DIR = "/net/scratch/jiaweizhang"
+    cache_dir = MODEL_DIR 
     
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
@@ -53,48 +53,3 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
     
     return model, tokenizer, sentence_transformer
 
-
-if __name__ == "__main__":
-    # Load model and tokenizer.
-    model_name = "/net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-Instruct"
-    model, tokenizer, text_processor, sentence_transformer = get_lora_model(model_name)
-
-    prompt = "Generate one sentence about California:"
-    # Create a custom generation configuration that stops on a newline.
-    custom_gen_config = GenerationConfig(
-        temperature=1.0,
-        top_p=0.95,
-        do_sample=True,
-        eos_token_id=tokenizer.eos_token_id,
-        stop_strings=["\n"]
-    )
-
-    results = generate_sequences_with_logits(
-        prompt,
-        model,
-        tokenizer,
-        batch_size=4,
-        max_new_tokens=50,
-        sampled_only=True,
-        generation_config=custom_gen_config
-    )
-
-    print("Generated sequences:")
-    for seq in results["sequences"]:
-        print(tokenizer.decode(seq, skip_special_tokens=False))
-        print("--------------")
-
-    print("\nLogits shape:", results["logits"].shape)
-    print("Probabilities shape:", results["probabilities"].shape)
-    print("Attention mask shape:", results["attention_mask"].shape)
-
-    from replay_buffer import calculate_similarity_scores
-
-    decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in results["sequences"]]
-    similarity_scores = calculate_similarity_scores(sentence_transformer, decoded_sequences)
-    print("Similarity scores shape:", similarity_scores.shape)
-    print("Similarity scores:", similarity_scores)
-
-    # get the device of the embedder
-    device = sentence_transformer.device
-    print("Embedder device:", device)

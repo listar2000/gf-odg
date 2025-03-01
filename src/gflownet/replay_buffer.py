@@ -272,31 +272,4 @@ class DiversityReplayBuffer:
         return stats
 
 
-if __name__ == "__main__":
-    cache_dir = "/net/scratch2/listar2000/gfn-od/models/pretrained/sentence_transformer"
-    sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
-
-    buffer = DiversityReplayBuffer(sentence_transformer, n_clusters=2, buffer_size=20, update_clusters_every=2, min_samples_for_clustering=3)
-
-    print("Transformers device:", sentence_transformer.device)
-    
-    concept = "animal"
-    initial_texts = ["Dogs are cute", "Cats are cute", "Dogs are friendly", "Kittens are friendly", "Puppies are cute"]
-    buffer.add_samples(concept, initial_texts)
-    
-    animals = {"Dogs", "Cats", "Puppies", "Kittens"}
-    adjectives = {"cute", "friendly"}
-
-    stats = buffer.get_stats()
-
-    import random
-    for i in range(10):
-        new_texts = [f"{random.choice(list(animals))} are {random.choice(list(adjectives))}" for _ in range(3)]
-        assigned = buffer.add_samples(concept, new_texts)
-        
-        stats = buffer.get_stats()
-        for i in range(len(new_texts)):
-            print(str(assigned[i].item()) + " => " + new_texts[i])
-
-        print(stats)
 

@@ -15,12 +15,13 @@ class RawTextProcessor:
         self.only_concepts = only_concepts
 
     def process_text_to_trajectory(self, raw_text: List[str]) -> List[AbstractBlock]:
-        concepts_to_check = list(self.concepts.keys())  # Changed from set to list
+        concepts_to_check = list(self.concepts.keys())  
         blocks = []
         block_indices = []
 
         open_buffer = []
         window = collections.deque(maxlen=self.max_window_size)
+        buffer_start = 0  # Track the start of an OpenBlock
 
         for i, token in enumerate(raw_text):
             # Check every suffix ending with the new token
@@ -30,28 +31,28 @@ class RawTextProcessor:
             for concept in concepts_to_check:  # Iterate in order
                 concept_block, L = self.detect_concepts(window, [concept])
                 if concept_block is not None:  # Matched
-                    concepts_to_check.remove(concept)  # Remove in order
+                    concepts_to_check.remove(concept) 
                     window.clear()
                     
                     if not self.only_concepts:  # Skip OpenBlocks if only_concepts is True
                         buffer_flushed = open_buffer[:-L]
                         if buffer_flushed:
-                            block_indices.append(i - len(open_buffer) + 1)
+                            block_indices.append((buffer_start, i - L))  # Store (start, end)
                             blocks.append(OpenBlock(0, buffer_flushed))
 
                     blocks.append(concept_block)
-                    block_indices.append(i - L + 1)
+                    block_indices.append((i - L + 1, i + 1))  # Store (start, end)
                     open_buffer = []
+                    buffer_start = i + 1  # Reset start index for next OpenBlock
                     break  # Exit the loop after detecting one concept
 
         # Flush the buffer if `only_concepts` is False
         if open_buffer and not self.only_concepts:
-            block_indices.append(len(raw_text) - len(open_buffer))
+            block_indices.append((buffer_start, len(raw_text)))  # Store (start, end)
             blocks.append(OpenBlock(0, open_buffer))
 
         return blocks, block_indices
 
-   
 
     def detect_concepts(self, window: collections.deque, concepts_to_check: set[str]) -> Optional[str]:
         window_list = list(window)
@@ -68,7 +69,6 @@ class RawTextProcessor:
                     return concept_block, L
         return None, -1
 
-
 if __name__ == "__main__":
     import time
 
@@ -76,9 +76,11 @@ if __name__ == "__main__":
     
     N_Concepts = 4
     flowers = [Concept(f"flower{i+1}", ListOfFlowerNames, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
-    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts)
-    raw_text = ["Rose", "Cornflower", "Dahlia", "Dahlia",","] 
+    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts, only_concepts=True)
+    raw_text = ["Ro","se",",", "Cornflower", "Dahlia", "Dahlia",","] 
 
     blocks, s = text_processor.process_text_to_trajectory(raw_text)
+    #print type of blocks
+    print(type(blocks))
     print(blocks)
     print(s)
