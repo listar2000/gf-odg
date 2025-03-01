@@ -377,29 +377,19 @@ def train_step(
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
 
     # Extract concept blocks and open blocks
-    concept_blocks, open_block_dict = extract_blocks_from_trajectories(trajectories, diversity_config.concept_name)
+    concept_blocks, _ = extract_blocks_from_trajectories(trajectories, diversity_config.concept_name)
 
     # Calculate concept loss and open block loss
     concept_loss = calculate_concept_kl(concept_blocks)
 
-    open_block_loss = []
-    for concept_option in open_block_dict:
-        open_blocks = open_block_dict[concept_option]
-        texts = ["".join(block.raw_text) for block in open_blocks]       
-        labels = replay_buffer.add_samples(concept_option=concept_option, texts=texts)
-        assert labels is not None, "Labels must not be None"
-        n_clusters = replay_buffer.get_n_clusters(concept_option)
-        open_block_loss.append(calculate_open_block_kl(open_blocks, labels, n_clusters=n_clusters))
-    
-    open_block_loss = sum(open_block_loss)
     # Combine losses
-    total_loss = diversity_config.w_c * concept_loss + diversity_config.w_o * open_block_loss
+    total_loss = diversity_config.w_c * concept_loss
     
     # Backpropagate
     total_loss.backward()
     optimizer.step()
     
-    return concept_loss.item(), open_block_loss.item(), total_loss.item()
+    return concept_loss.item(), _, total_loss.item()
 
 
 def train(
@@ -495,7 +485,7 @@ def train(
         
         for step in range(training_config.num_steps_per_epoch):
             # Perform training step
-            concept_loss, open_block_loss, total_loss = train_step(
+            concept_loss, _, total_loss = train_step(
                 model_config=model_config,
                 gen_config=gen_config,
                 diversity_config=diversity_config,
@@ -516,7 +506,7 @@ def train(
             metrics = {
                 "total_loss": total_loss,
                 "concept_loss": concept_loss,
-                "open_block_loss": open_block_loss,
+                "open_block_loss": None,
                 "learning_rate": current_lr,
                 "epoch": epoch + 1,
                 "step": step + 1
@@ -528,7 +518,7 @@ def train(
             
             # Log progress
             logger.info(f"Epoch {epoch+1}/{training_config.num_epochs}, Step {step+1}/{training_config.num_steps_per_epoch}, Loss: {total_loss:.4f}, LR: {current_lr:.7f}")
-            logger.info(f"Concept Loss: {concept_loss:.4f}, Open Block Loss: {open_block_loss:.4f}")
+            logger.info(f"Concept Loss: {concept_loss:.4f}, Open Block Loss: {None:.4f}")
             
             # Generate and log sample at the end of epoch
             if step == training_config.num_steps_per_epoch - 1:
@@ -649,7 +639,7 @@ if __name__ == "__main__":
     # Create text processor with N flower concept
     N_Concepts = 5
     flowers = [Concept(f"flower{i+1}", ListOfFlowerNames, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
-    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts)
+    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts, only_concepts=True)
     
     # Set up generation config
     generation_config = GenerationConfig(

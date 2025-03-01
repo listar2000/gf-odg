@@ -4,10 +4,12 @@
 MODEL_PATH="/net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-Instruct"
 
 # Base prompt
-PROMPT="In 20 words, say whether you love dog or cat more, and give a reason; Answer:"
+PROMPT="Generate 5 flower names, separated by commas. Answer:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/net/scratch2/listar2000/gfn-od/models/finetuned/train_animal"
+BASE_OUTPUT_DIR="/net/scratch/jiaweizhang/gfn-od/models/finetuned/train_animal"
+
+mkdir -p ${BASE_OUTPUT_DIR}
 
 # Slurm configuration
 SLURM_CPUS=16
@@ -15,7 +17,7 @@ SLURM_MEM=64000
 SLURM_GPU="a100:1"
 
 # Array of w_o values to test
-W_O_VALUES=(0.3 0.4 0.5 0.6 0.7 0.8 0.9)
+W_O_VALUES=(0.5)
 
 # Loop through each w_o value and submit a job
 for w_o in "${W_O_VALUES[@]}"; do
@@ -24,7 +26,7 @@ for w_o in "${W_O_VALUES[@]}"; do
     
     # Create a unique output directory and run name based on the w_o value
     output_dir="${BASE_OUTPUT_DIR}/second_w_o_${w_o}"
-    run_name="second_animal_w_o_${w_o}"
+    run_name="second_flower_w_o_${w_o}"
     
     # Create the job script
     job_script=$(mktemp)
@@ -46,10 +48,11 @@ mkdir -p ${output_dir}
 mkdir -p ${BASE_OUTPUT_DIR}/logs
 
 # Activate your environment if needed
-source /net/scratch2/listar2000/gfn-od/.venv/bin/activate
+eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
+conda activate FoR
 
 # Run the training script with the specific hyperparameters
-python /net/scratch2/listar2000/gfn-od/src/gflownet/train_animal.py \
+python /home/jiaweizhang/gf-odg/src/gflownet/train_flower.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
     --concept_name "animal" \
