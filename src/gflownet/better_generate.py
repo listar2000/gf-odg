@@ -113,10 +113,11 @@ def generate_sequences_with_logits(
                     if len(generated_sequences[i]) > prompt_length:
                         active_mask[i] = False
                 elif stop_strings:
-                    # Decode current sequence and check for any stop string.
-                    current_text = tokenizer.decode(generated_sequences[i], skip_special_tokens=True)
-                    if any(stop in current_text for stop in stop_strings):
-                        active_mask[i] = False
+                    if len(generated_sequences[i]) > prompt_length:
+                        # Decode current sequence and check for any stop string.
+                        current_text = tokenizer.decode(generated_sequences[i][prompt_length:], skip_special_tokens=True)
+                        if any(stop in current_text for stop in stop_strings):
+                            active_mask[i] = False
 
         # If all sequences are finished, break early.
         if not active_mask.any():

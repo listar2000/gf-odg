@@ -131,7 +131,8 @@ class Chatbot:
                         repetition_penalty=1.1,
                         do_sample=True,
                         pad_token_id=self.tokenizer.pad_token_id,
-                        stop_strings=["\n", ".\n\n", ".\n"],
+                        stop_strings=["\n", ".\n\n", ".\n", "."],
+                        # stop_strings=[".\n\n", ".\n"],
                         tokenizer=self.tokenizer
                     )
 
