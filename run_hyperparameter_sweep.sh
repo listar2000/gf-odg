@@ -7,7 +7,7 @@ MODEL_PATH="/net/scratch2/listar2000/gfn-od/models/pretrained/Meta-Llama-3-8B-In
 PROMPT="Generate 5 flower names, separated by commas. Answer:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/net/scratch/jiaweizhang/gfn-od/models/finetuned/train_animal"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_animal"
 
 mkdir -p ${BASE_OUTPUT_DIR}
 
