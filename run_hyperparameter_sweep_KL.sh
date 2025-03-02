@@ -26,7 +26,7 @@ output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
 
 # Array of KL_penalty values to test
-KL_PENALTY_VALUES=(0.05 0.2 0.5 0.8 2)
+KL_PENALTY_VALUES=(0.0001 0.001 0.005 0.01 0.02 0.04 0.08)
 
 # Loop through each KL_penalty value and submit a job
 for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
