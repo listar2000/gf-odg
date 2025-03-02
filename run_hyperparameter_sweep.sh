@@ -13,7 +13,7 @@ mkdir -p ${BASE_OUTPUT_DIR}
 
 # Slurm configuration
 SLURM_CPUS=16
-SLURM_MEM=64000
+SLURM_MEM=96000
 SLURM_GPU="a100:1"
 
 # Export WANDB API key

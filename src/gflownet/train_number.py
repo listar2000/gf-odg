@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR
 import math
 from dataclasses import dataclass, field
 import argparse
+from KL_penalty import compute_kl_penalty
 
 # Local imports
 from model import get_lora_model
@@ -245,19 +246,16 @@ def train_step(
             generation_config=gen_config.generation_config
         )
 
-    ### **Step 3: Compute KL divergence loss** ###
-    device = model_config.model.device  # Ensure tensors are on the same device
+    
+    ### **Step 3: Compute KL divergence loss using `compute_kl_penalty`** ###
+    device = model_config.model.device  # Ensure correct device usage
 
-    # Convert logits lists to tensors and move to device
-    model_logits = torch.stack(generations["logits"]).to(device)  # Shape: (batch, seq_len, vocab_size)
-    reference_logits = torch.stack(reference_generations["logits"]).to(device)
+    # Ensure logits exist before computing KL
+    if not generations["logits"] or not reference_generations["logits"]:
+        raise ValueError("Logits are missing from model or reference model outputs.")
 
-    # Convert logits to log-probabilities for numerical stability
-    model_log_probs = torch.nn.functional.log_softmax(model_logits, dim=-1)
-    reference_probs = torch.nn.functional.softmax(reference_logits, dim=-1)
-
-    # Compute KL divergence (averaged over batch and sequence length)
-    kl_penalty = torch.nn.functional.kl_div(model_log_probs, reference_probs, reduction="batchmean")
+    # Compute KL penalty using the imported function
+    kl_penalty = compute_kl_penalty(generations["logits"], reference_generations["logits"], device=device)
 
     ### **Step 4: Process sequences into trajectories** ###
     trajectories, idxs = [], []
@@ -285,7 +283,7 @@ def train_step(
     total_loss.backward()
     optimizer.step()
 
-    return concept_loss_list, kl_penalty.item(), total_loss.item()
+    return concept_loss_list, kl_penalty, total_loss.item()
 
 
 
