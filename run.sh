@@ -1,37 +1,30 @@
 #!/bin/bash
 
+set -e  # Exit on any error
+
 # Base model path - update this to your model path
 MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 
 # Base prompt
-PROMPT="Generate 9 random numbers from 1-9 independently of each other, ensuring no influence between selections. Separate the numbers with commas. Answer:"
+PROMPT="Generate 5 random numbers from 1-5 independently of each other, ensuring no influence between selections. Separate the numbers with commas. Answer:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_animal"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"
 
-mkdir -p ${BASE_OUTPUT_DIR}
+mkdir -p ${BASE_OUTPUT_DIR}/logs
 
-# Slurm configuration (not necessary for direct run, but you can keep them if you want to track)
-SLURM_CPUS=16
-SLURM_MEM=64000
-SLURM_GPU="a100:1"
+# Define output directory and run name for this single run
+output_dir="${BASE_OUTPUT_DIR}/number"
+run_name="number"
 
 # Export WANDB API key
-export WANDB_API_KEY=94df40f69fe1711f227d8df8c9cf9ea389060b66
+export WANDB_API_KEY="94df40f69fe1711f227d8df8c9cf9ea389060b66"
 
-# Create the output directory and logs if not present
-mkdir -p ${BASE_OUTPUT_DIR}/logs
-
-# Define output directory and run name for this single job
-output_dir="${BASE_OUTPUT_DIR}/flower"
-run_name="flower"
-
-# Create output and log directories if they don't exist
+# Create output directory if not exists
 mkdir -p ${output_dir}
-mkdir -p ${BASE_OUTPUT_DIR}/logs
 
 # Run the training script with the necessary hyperparameters
-python /home/jiaweizhang/gf-odg/src/gflownet/train_flower.py \
+python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
     --concept_name "animal" \
@@ -53,4 +46,4 @@ python /home/jiaweizhang/gf-odg/src/gflownet/train_flower.py \
     --wandb_project "gfn-diversity" \
     --wandb_name ${run_name}
 
-echo "Job completed!"
+echo "Training completed successfully!"

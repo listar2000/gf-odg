@@ -150,17 +150,23 @@ def calculate_concept_kl(concept_blocks: List[ConceptBlock], concept: Concept) -
     Calculate the KL divergence between the empirical distribution and a uniform distribution,
     ensuring that all concept options are included in the probability distribution.
     """
+    # Detect the device dynamically
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Initialize probability dictionary with zero probabilities for all options in the concept
-    option_probs = {option: torch.tensor(0.0, requires_grad=True) for option in concept.options}
+    option_probs = {
+        option: torch.tensor(0.0, requires_grad=True, device=device)  # Ensure tensor is on the correct device
+        for option in concept.options
+    }
 
     # Sum probabilities for each option
     for block in concept_blocks:
         option = block.option
         if option in option_probs:
-            option_probs[option] = option_probs[option] + block.prob  # Maintain gradient tracking
+            option_probs[option] = option_probs[option] + block.prob.to(device)  # Move block.prob to the same device
 
     # Convert probabilities to a tensor
-    empirical_probs = torch.stack(list(option_probs.values()))
+    empirical_probs = torch.stack(list(option_probs.values())).to(device)  # Ensure stacking happens on the correct device
 
     # Ensure the sum of probabilities is positive
     assert empirical_probs.sum() > 0, "Total probability must be > 0"
@@ -170,10 +176,11 @@ def calculate_concept_kl(concept_blocks: List[ConceptBlock], concept: Concept) -
     empirical_probs = empirical_probs / empirical_probs.sum()
 
     # Define a uniform distribution over all options
-    uniform_probs = torch.ones_like(empirical_probs) / len(concept.options)
+    uniform_probs = torch.ones_like(empirical_probs, device=device) / len(concept.options)
 
     # Compute KL divergence
     return kl_divergence(empirical_probs, uniform_probs, is_log=False)
+
 
 
 def fill_blocks_with_probs(
@@ -236,23 +243,20 @@ def train_step(
     # Fill probabilities 
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
 
-    total_loss = None
+    concept_loss_list = []
 
     # Extract concept blocks and open blocks
     for concept in ConceptNames:
         concept_blocks, _ = extract_blocks_from_trajectories(trajectories, concept.name)
-
-        # Calculate concept loss and open block loss
-        if total_loss is None:
-            total_loss = calculate_concept_kl(concept_blocks, concept)
-        else:
-            total_loss += calculate_concept_kl(concept_blocks, concept)
+        concept_loss_list.append(calculate_concept_kl(concept_blocks, concept))
     
+    total_loss = sum(concept_loss_list)
+
     # Backpropagate
     total_loss.backward()
     optimizer.step()
     
-    return None, None, total_loss.item()
+    return concept_loss_list, total_loss.item()
 
 
 def train(
@@ -342,7 +346,7 @@ def train(
         
         for step in range(training_config.num_steps_per_epoch):
             # Perform training step
-            concept_loss, _, total_loss = train_step(
+            concept_loss_list, total_loss = train_step(
                 model_config=model_config,
                 gen_config=gen_config,
                 diversity_config=diversity_config,
@@ -362,8 +366,6 @@ def train(
             # Log metrics
             metrics = {
                 "total_loss": total_loss,
-                "concept_loss": concept_loss,
-                "open_block_loss": None,
                 "learning_rate": current_lr,
                 "epoch": epoch + 1,
                 "step": step + 1
@@ -373,10 +375,15 @@ def train(
             if wandb_config and wandb_config.use_wandb:
                 wandb.log(metrics)
             
+            # Log individual concept losses separately
+            for i, loss in enumerate(concept_loss_list):
+                metrics[f"concept_loss_{i}"] = loss.item()  # Ensure it's a scalar before logging
+
             # Log progress
+            concept_loss_str = ", ".join([f"Concept {i}: {loss.item():.4f}" for i, loss in enumerate(concept_loss_list)])
             logger.info(f"Epoch {epoch+1}/{training_config.num_epochs}, Step {step+1}/{training_config.num_steps_per_epoch}, Loss: {total_loss:.4f}, LR: {current_lr:.7f}")
-            logger.info(f"Concept Loss: {concept_loss:.4f}, Open Block Loss: {None:.4f}")
-            
+            logger.info(f"Concept Losses: {concept_loss_str}")
+
             # Generate and log sample at the end of epoch
             if step == training_config.num_steps_per_epoch - 1:
                 with torch.no_grad():

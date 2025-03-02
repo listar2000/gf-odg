@@ -4,7 +4,7 @@
 MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 
 # Base prompt
-PROMPT="Generate 5 flower names, separated by commas. Answer:"
+PROMPT="Generate 5 random numbers from 1-5 independently of each other, ensuring no influence between selections. Separate the numbers with commas. Answer:"
 
 # Base output directory
 BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"
@@ -17,7 +17,6 @@ SLURM_MEM=64000
 SLURM_GPU="a100:1"
 
 # Export WANDB API key
-export WANDB_API_KEY=94df40f69fe1711f227d8df8c9cf9ea389060b66
 
 # Create the output directory and logs if not present
 mkdir -p ${BASE_OUTPUT_DIR}/logs
@@ -25,6 +24,7 @@ mkdir -p ${BASE_OUTPUT_DIR}/logs
 # Define output directory and run name for this single job
 output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
+
 
 # Create the job script
 job_script=$(mktemp)
@@ -45,12 +45,14 @@ cat > "$job_script" << EOL
 mkdir -p ${output_dir}
 mkdir -p ${BASE_OUTPUT_DIR}/logs
 
+WANDB_API_KEY = 94df40f69fe1711f227d8df8c9cf9ea389060b66
+
 # Activate your environment if needed
 eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
 conda activate FoR
 
 # Run the training script with the necessary hyperparameters
-python /home/jiaweizhang/gf-odg/src/gflownet/train_flower.py \
+python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
     --concept_name "animal" \
