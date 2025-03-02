@@ -28,6 +28,7 @@ class ModelConfig:
     tokenizer: AutoTokenizer
     text_processor: RawTextProcessor
     sentence_transformer: Optional[SentenceTransformer] = None
+    reference_model: Optional[PeftModel] = None
 
 @dataclass
 class TextGenerationConfig:
@@ -46,6 +47,7 @@ class DiversityConfig:
     fixed_n_clusters: bool = False
     w_c: float = 0.5  # Weight for concept loss
     w_o: float = 0.5  # Weight for open block loss
+    w_kl: float = 0.1  # Weight for KL penalty
     num_samples: int = 100  # Number of samples for initializing replay buffer
     buffer_size: int = 500  # Maximum size of the replay buffer
     update_clusters_every: int = 20  # Update clusters every N samples
@@ -206,23 +208,23 @@ def train_step(
     diversity_config: DiversityConfig,
     optimizer: torch.optim.Optimizer,
     ConceptNames: List[Concept]
-) -> Tuple[float, float, float]:
+) -> Tuple[List[torch.Tensor], float, float]:
     """
-    Perform a single training step.
-    
+    Perform a single training step with KL divergence from a reference model.
+
     Args:
         model_config: Configuration for model and tokenizer
         gen_config: Configuration for text generation
         diversity_config: Configuration for diversity training
         optimizer: Optimizer for model parameters
-        
+
     Returns:
-        Tuple of (concept_loss, open_block_loss, total_loss) as float values
+        Tuple of (concept_loss_list, kl_penalty, total_loss) as float values.
     """
     model_config.model.train()
     optimizer.zero_grad()
-    
-    # Generate sequences
+
+    ### **Step 1: Generate sequences with fine-tuned model** ###
     generations = generate_sequences_with_logits(
         prompt=gen_config.prompt,
         model=model_config.model,
@@ -232,32 +234,59 @@ def train_step(
         generation_config=gen_config.generation_config
     )
 
-    # Process sequences into trajectories
+    ### **Step 2: Generate sequences with reference model (no gradients)** ###
+    with torch.no_grad():
+        reference_generations = generate_sequences_with_logits(
+            prompt=gen_config.prompt,
+            model=model_config.reference_model,
+            tokenizer=model_config.tokenizer,
+            batch_size=gen_config.batch_size,
+            max_new_tokens=gen_config.max_new_tokens,
+            generation_config=gen_config.generation_config
+        )
+
+    ### **Step 3: Compute KL divergence loss** ###
+    device = model_config.model.device  # Ensure tensors are on the same device
+
+    # Convert logits lists to tensors and move to device
+    model_logits = torch.stack(generations["logits"]).to(device)  # Shape: (batch, seq_len, vocab_size)
+    reference_logits = torch.stack(reference_generations["logits"]).to(device)
+
+    # Convert logits to log-probabilities for numerical stability
+    model_log_probs = torch.nn.functional.log_softmax(model_logits, dim=-1)
+    reference_probs = torch.nn.functional.softmax(reference_logits, dim=-1)
+
+    # Compute KL divergence (averaged over batch and sequence length)
+    kl_penalty = torch.nn.functional.kl_div(model_log_probs, reference_probs, reduction="batchmean")
+
+    ### **Step 4: Process sequences into trajectories** ###
     trajectories, idxs = [], []
     for sequence in generations["sequences"]:
         decoded_list = [model_config.tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
-        print(decoded_list)
         trajectory, idx = model_config.text_processor.process_text_to_trajectory(decoded_list)
         trajectories.append(trajectory)
         idxs.append(idx)
 
-    
-    # Fill probabilities 
+    # Fill probabilities
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
 
+    ### **Step 5: Compute Concept Loss** ###
     concept_loss_list = []
-
-    # Extract concept blocks and open blocks
     for concept in ConceptNames:
         concept_blocks, _ = extract_blocks_from_trajectories(trajectories, concept.name)
         concept_loss_list.append(calculate_concept_kl(concept_blocks, concept))
-    
-    total_loss = sum(concept_loss_list)
 
-    # Backpropagate
+    concept_loss = sum(concept_loss_list)
+
+    ### **Step 6: Compute Total Loss** ###
+    total_loss = concept_loss + diversity_config.w_kl * kl_penalty
+
+    ### **Step 7: Backpropagation and Optimization** ###
     total_loss.backward()
     optimizer.step()
-    return concept_loss_list, total_loss.item()
+
+    return concept_loss_list, kl_penalty.item(), total_loss.item()
+
 
 
 def train(
@@ -293,6 +322,7 @@ def train(
             "batch_size": gen_config.batch_size,
             "w_c": diversity_config.w_c,
             "w_o": diversity_config.w_o,
+            "w_kl": diversity_config.w_kl,
             "n_clusters": diversity_config.n_clusters,
             "max_new_tokens": gen_config.max_new_tokens,
             "num_samples": diversity_config.num_samples,
@@ -347,7 +377,7 @@ def train(
         
         for step in range(training_config.num_steps_per_epoch):
             # Perform training step
-            concept_loss_list, total_loss = train_step(
+            concept_loss_list, kl_penalty, total_loss = train_step(
                 model_config=model_config,
                 gen_config=gen_config,
                 diversity_config=diversity_config,
@@ -369,7 +399,8 @@ def train(
                 "total_loss": total_loss,
                 "learning_rate": current_lr,
                 "epoch": epoch + 1,
-                "step": step + 1
+                "step": step + 1,
+                "kl_penalty": kl_penalty
             }
             
             # Log to wandb if enabled
@@ -384,6 +415,7 @@ def train(
             concept_loss_str = ", ".join([f"Concept {i}: {loss.item():.4f}" for i, loss in enumerate(concept_loss_list)])
             logger.info(f"Epoch {epoch+1}/{training_config.num_epochs}, Step {step+1}/{training_config.num_steps_per_epoch}, Loss: {total_loss:.4f}, LR: {current_lr:.7f}")
             logger.info(f"Concept Losses: {concept_loss_str}")
+            logger.info(f"KL Penalty: {kl_penalty:.4f}")
 
             # Generate and log sample at the end of epoch
             if step == training_config.num_steps_per_epoch - 1:
@@ -463,6 +495,7 @@ if __name__ == "__main__":
     
     parser.add_argument("--w_c", type=float, default=0.8, help="Weight for concept loss")
     parser.add_argument("--w_o", type=float, default=0.2, help="Weight for open block loss")
+    parser.add_argument("--w_kl", type=float, default=0.1, help="Weight for KL penalty")
     parser.add_argument("--buffer_size", type=int, default=500, help="Maximum size of the replay buffer")
     parser.add_argument("--update_clusters_every", type=int, default=100, help="Update clusters every N samples")
     parser.add_argument("--min_samples_for_clustering", type=int, default=20, help="Minimum samples required for clustering")
@@ -492,7 +525,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     
     # Load model and tokenizer
-    model, tokenizer, sentence_transformer = get_lora_model(
+    model, tokenizer, sentence_transformer,reference_model = get_lora_model(
         model_name_or_path=args.model_name_or_path,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
@@ -519,7 +552,8 @@ if __name__ == "__main__":
         model=model, 
         tokenizer=tokenizer, 
         text_processor=text_processor, 
-        sentence_transformer=sentence_transformer
+        sentence_transformer=sentence_transformer,
+        reference_model=reference_model
     )
     
     gen_config = TextGenerationConfig(
@@ -535,6 +569,7 @@ if __name__ == "__main__":
         num_samples=args.num_samples, 
         w_c=args.w_c, 
         w_o=args.w_o, 
+        w_kl=args.w_kl,
         buffer_size=args.buffer_size, 
         update_clusters_every=args.update_clusters_every, 
         min_samples_for_clustering=args.min_samples_for_clustering

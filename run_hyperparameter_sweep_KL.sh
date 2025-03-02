@@ -25,21 +25,38 @@ mkdir -p ${BASE_OUTPUT_DIR}/logs
 output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
 
+# Array of KL_penalty values to test
+KL_PENALTY_VALUES=(0.05 0.1 0.2 0.3)
 
-# Create the job script
-job_script=$(mktemp)
+# Loop through each KL_penalty value and submit a job
+for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
+    # Create a unique output directory and run name based on KL_penalty
+    output_dir="${BASE_OUTPUT_DIR}/kl_${kl_penalty}"
+    run_name="animal_kl_${kl_penalty}"
 
-cat > "$job_script" << EOL
+    # Create the job script
+    job_script=$(mktemp)
+
+    cat > "$job_script" << EOL
 #!/bin/bash
 #SBATCH --job-name=${run_name}
 #SBATCH --output=${BASE_OUTPUT_DIR}/logs/${run_name}_%j.out
 #SBATCH --error=${BASE_OUTPUT_DIR}/logs/${run_name}_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=${SLURM_CPUS}
-#SBATCH --mem=${SLURM_MEM}
-#SBATCH --gres=gpu:${SLURM_GPU}
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64000
+#SBATCH --gres=gpu:a100:1
 #SBATCH --time=120:00
 #SBATCH --partition=general
+
+# Base model path - update this to your model path
+MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
+
+# Base prompt
+PROMPT="Generate 5 random numbers from 1 to 5, independently of each other, separated by commas. The generated numbers:"
+
+# Base output directory
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"
 
 # Create output and log directories if they don't exist
 mkdir -p ${output_dir}
@@ -48,7 +65,7 @@ mkdir -p ${BASE_OUTPUT_DIR}/logs
 export WANDB_API_KEY="94df40f69fe1711f227d8df8c9cf9ea389060b66"
 
 # Activate your environment if needed
-eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
+eval "\$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
 conda activate FoR
 
 # Run the training script with the necessary hyperparameters
@@ -56,7 +73,7 @@ python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
     --concept_name "animal" \
-    --w_kl 0.1 \
+    --w_kl ${kl_penalty} \
     --n_clusters 5 \
     --num_samples 320 \
     --buffer_size 500 \
@@ -74,13 +91,15 @@ python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --use_wandb \
     --wandb_project "gfn-diversity" \
     --wandb_name ${run_name}
+
 EOL
 
-# Submit the job
-echo "Submitting the job for ${run_name}"
-sbatch "$job_script"
+    # Submit the job
+    echo "Submitting the job for ${run_name}"
+    sbatch "$job_script"
 
-# Clean up the temporary job script
-rm "$job_script"
+    # Clean up the temporary job script
+    rm "$job_script"
 
-echo "Job submitted!"
+    echo "Job submitted for kl_penalty=${kl_penalty}!"
+done

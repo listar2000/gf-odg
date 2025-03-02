@@ -33,6 +33,14 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
         torch_dtype=torch.bfloat16,
         device_map="auto"
     )
+
+    reference_model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path,
+        torch_dtype=torch.bfloat16,
+        device_map="auto"
+    )
+    reference_model.eval()
+
     
     # Configure LoRA
     lora_config = LoraConfig(
@@ -51,5 +59,5 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
     # Load sentence transformer
     sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
     
-    return model, tokenizer, sentence_transformer
+    return model, tokenizer, sentence_transformer, reference_model
 
