@@ -254,6 +254,10 @@ def train_step(
     if not generations["logits"] or not reference_generations["logits"]:
         raise ValueError("Logits are missing from model or reference model outputs.")
 
+    print("************")
+    print("generation sequence",generations["sequences"])
+    print("reference generation sequence",reference_generations["sequences"])
+    print("************")
     # Compute KL penalty using the imported function
     kl_penalty = compute_kl_penalty(generations["logits"], reference_generations["logits"], device=device)
 
