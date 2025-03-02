@@ -4,7 +4,7 @@
 MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 
 # Base prompt
-PROMPT="Generate 5 random numbers from 1-5 independently of each other, ensuring no influence between selections. Separate the numbers with commas. Answer:"
+PROMPT="Generate 5 random numbers from 1-5 independently of each other. Answer:"
 
 # Base output directory
 BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"

@@ -231,14 +231,16 @@ def train_step(
         max_new_tokens=gen_config.max_new_tokens,
         generation_config=gen_config.generation_config
     )
-    
+
     # Process sequences into trajectories
     trajectories, idxs = [], []
     for sequence in generations["sequences"]:
         decoded_list = [model_config.tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
+        print(decoded_list)
         trajectory, idx = model_config.text_processor.process_text_to_trajectory(decoded_list)
         trajectories.append(trajectory)
         idxs.append(idx)
+
     
     # Fill probabilities 
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
@@ -255,7 +257,6 @@ def train_step(
     # Backpropagate
     total_loss.backward()
     optimizer.step()
-    
     return concept_loss_list, total_loss.item()
 
 

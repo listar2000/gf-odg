@@ -77,7 +77,7 @@ if __name__ == "__main__":
     N_Concepts = 5
     Numbers = [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
     text_processor = RawTextProcessor(Numbers, max_window_size=N_Concepts, only_concepts=True)
-    raw_text = ["1",",", "2", "3", "4", "5", "6", "7", "8", "9"] 
+    raw_text = [' The', ' ', '5', ' random', ' numbers', ' generated', ' are', ':', ' ', '2', ',', ' ', '5', ',', ' ', '1', ',', ' ', '4', ',', ' ', '3', '.', ' Answer', ' has', ' been', ' generated', '.', ' Have', ' a']
 
     blocks, s = text_processor.process_text_to_trajectory(raw_text)
     #print type of blocks
