@@ -70,14 +70,14 @@ class RawTextProcessor:
         return None, -1
 
 if __name__ == "__main__":
-    import time
 
-    ListOfFlowerNames = ["Cosmos", "Cornflower", "Dahlia", "Zinnia", "Chrysanthemum", "Celosia", "Larkspur", "Gladiolus", "Craspedia", "Gomphrena", "Sunflower", "Gerbera Daisy", "Snapdragon", "Bells of Ireland", "Stock", "Strawflower", "Nigella", "Nicotiana", "Nasturtium", "Petunia", "Marigold", "Impatiens", "Pansy", "Sweet Alyssum", "Morning Glory", "Coneflower", "Black-Eyed Susan", "Hosta", "Peony", "Daylily", "Lavender", "Phlox", "Shasta Daisy", "Bleeding Heart", "Iris", "Hellebore", "Yarrow", "Salvia", "Veronica", "Gaillardia", "Coreopsis", "Columbine", "Lupine", "Delphinium", "Astilbe", "Foxglove", "Hollyhock", "Sweet William", "Canterbury Bells", "Forget-Me-Not", "Evening Primrose", "Honesty", "Parsley", "Angelica", "Rose", "Tulip", "Orchid", "Lily", "Hydrangea", "Carnation", "Freesia", "Ranunculus", "Anemone", "Gardenia", "Azalea", "Camellia", "Jasmine", "Magnolia", "Bougainvillea"]
-    
-    N_Concepts = 4
-    flowers = [Concept(f"flower{i+1}", ListOfFlowerNames, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
-    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts, only_concepts=True)
-    raw_text = ["Ro","se",",", "Cornflower", "Dahlia", "Dahlia",","] 
+    # Create a list of numbers    
+    ListOfNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    # Create text processor with N flower concept
+    N_Concepts = 5
+    Numbers = [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
+    text_processor = RawTextProcessor(Numbers, max_window_size=N_Concepts, only_concepts=True)
+    raw_text = ["1",",", "2", "3", "4", "5", "6", "7", "8", "9"] 
 
     blocks, s = text_processor.process_text_to_trajectory(raw_text)
     #print type of blocks

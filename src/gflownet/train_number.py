@@ -81,6 +81,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def extract_blocks_from_trajectories(
+    trajectories: List[List[AbstractBlock]],
+    concept_name: str
+) -> Tuple[List[ConceptBlock], Dict[str, List[OpenBlock]]]:
+    """
+    Extract concept blocks and open blocks from trajectories.
+    For concept blocks, only extract those with the specified concept name.
+    For open blocks, extract those that follow the specified concept.
+    """
+    concept_blocks = []
+    open_block_dict = {}
+    
+    for trajectory in trajectories:
+        prev_concept_option = None
+        for i, block in enumerate(trajectory):
+            if isinstance(block, ConceptBlock) and block.concept.name == concept_name:
+                concept_blocks.append(block)
+                prev_concept_option = block.option
+            elif isinstance(block, OpenBlock) and prev_concept_option is not None and i > 0:
+                # This open block follows a concept block of interest
+                if isinstance(trajectory[i-1], ConceptBlock) and trajectory[i-1].concept.name == concept_name:
+                    if open_block_dict.get(prev_concept_option) is None:
+                        open_block_dict[prev_concept_option] = []
+                    open_block_dict[prev_concept_option].append(block)
+    
+    return concept_blocks, open_block_dict
 
 def kl_divergence(p: torch.Tensor, q: torch.Tensor, is_log: bool = False):
     """
@@ -119,39 +145,34 @@ def kl_divergence(p: torch.Tensor, q: torch.Tensor, is_log: bool = False):
         return kl.sum()
 
 
-def calculate_concept_kl(
-    concept_blocks: List[ConceptBlock]
-) -> torch.Tensor:
+def calculate_concept_kl(concept_blocks: List[ConceptBlock], concept: Concept) -> torch.Tensor:
     """
-    Calculate the KL divergence between the empirical distribution and a uniform distribution, where the 
-    empirical distribution is the distribution of concept options.
+    Calculate the KL divergence between the empirical distribution and a uniform distribution,
+    ensuring that all concept options are included in the probability distribution.
     """
-    # Group blocks by option
-    option_blocks = {}
+    # Initialize probability dictionary with zero probabilities for all options in the concept
+    option_probs = {option: torch.tensor(0.0, requires_grad=True) for option in concept.options}
+
+    # Sum probabilities for each option
     for block in concept_blocks:
         option = block.option
-        if option not in option_blocks:
-            option_blocks[option] = []
-        option_blocks[option].append(block)
-    
-    # Sum probabilities for each option while maintaining gradients
-    empirical_probs = []
-    for option, blocks in option_blocks.items():
-        # Sum the probabilities for this option
-        option_prob = sum([block.prob for block in blocks])
-        empirical_probs.append(option_prob)
-    
-    # Stack into a tensor to maintain gradient flow
-    empirical_probs = torch.stack(empirical_probs)
-    
-    # Check if sum is positive
+        if option in option_probs:
+            option_probs[option] = option_probs[option] + block.prob  # Maintain gradient tracking
+
+    # Convert probabilities to a tensor
+    empirical_probs = torch.stack(list(option_probs.values()))
+
+    # Ensure the sum of probabilities is positive
     assert empirical_probs.sum() > 0, "Total probability must be > 0"
     assert empirical_probs.requires_grad, "Empirical probs must require gradient"
 
-    # Normalize
+    # Normalize empirical probabilities
     empirical_probs = empirical_probs / empirical_probs.sum()
 
-    uniform_probs = torch.ones_like(empirical_probs) / len(option_blocks)
+    # Define a uniform distribution over all options
+    uniform_probs = torch.ones_like(empirical_probs) / len(concept.options)
+
+    # Compute KL divergence
     return kl_divergence(empirical_probs, uniform_probs, is_log=False)
 
 
@@ -176,7 +197,8 @@ def train_step(
     model_config: ModelConfig,
     gen_config: TextGenerationConfig,
     diversity_config: DiversityConfig,
-    optimizer: torch.optim.Optimizer
+    optimizer: torch.optim.Optimizer,
+    ConceptNames: List[Concept]
 ) -> Tuple[float, float, float]:
     """
     Perform a single training step.
@@ -214,19 +236,23 @@ def train_step(
     # Fill probabilities 
     fill_blocks_with_probs(trajectories, idxs, generations["probabilities"])
 
-    # All blocks in the trajectories are concept blocks
-    concept_blocks = trajectories
+    total_loss = None
 
-    # Calculate concept loss and open block loss
-    concept_loss = calculate_concept_kl(concept_blocks)
+    # Extract concept blocks and open blocks
+    for concept in ConceptNames:
+        concept_blocks, _ = extract_blocks_from_trajectories(trajectories, concept.name)
 
-    total_loss = concept_loss
+        # Calculate concept loss and open block loss
+        if total_loss is None:
+            total_loss = calculate_concept_kl(concept_blocks, concept)
+        else:
+            total_loss += calculate_concept_kl(concept_blocks, concept)
     
     # Backpropagate
     total_loss.backward()
     optimizer.step()
     
-    return concept_loss.item(), None, total_loss.item()
+    return None, None, total_loss.item()
 
 
 def train(
@@ -234,7 +260,8 @@ def train(
     gen_config: TextGenerationConfig,
     diversity_config: DiversityConfig,
     training_config: TrainingConfig,
-    wandb_config: Optional[WandbConfig] = None
+    ConceptNames: List[Concept],
+    wandb_config: Optional[WandbConfig] = None,
 ) -> None:
     """
     Train the model to generate diverse responses.
@@ -319,7 +346,8 @@ def train(
                 model_config=model_config,
                 gen_config=gen_config,
                 diversity_config=diversity_config,
-                optimizer=optimizer
+                optimizer=optimizer,
+                ConceptNames=ConceptNames
             )
             
             epoch_loss += total_loss
@@ -462,13 +490,12 @@ if __name__ == "__main__":
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout
     )
-
-    ListOfFlowerNames = ["Cosmos", "Cornflower", "Dahlia", "Zinnia", "Chrysanthemum", "Celosia", "Larkspur", "Gladiolus", "Craspedia", "Gomphrena", "Sunflower", "Gerbera Daisy", "Snapdragon", "Bells of Ireland", "Stock", "Strawflower", "Nigella", "Nicotiana", "Nasturtium", "Petunia", "Marigold", "Impatiens", "Pansy", "Sweet Alyssum", "Morning Glory", "Coneflower", "Black-Eyed Susan", "Hosta", "Peony", "Daylily", "Lavender", "Phlox", "Shasta Daisy", "Bleeding Heart", "Iris", "Hellebore", "Yarrow", "Salvia", "Veronica", "Gaillardia", "Coreopsis", "Columbine", "Lupine", "Delphinium", "Astilbe", "Foxglove", "Hollyhock", "Sweet William", "Canterbury Bells", "Forget-Me-Not", "Evening Primrose", "Honesty", "Parsley", "Angelica", "Rose", "Tulip", "Orchid", "Lily", "Hydrangea", "Carnation", "Freesia", "Ranunculus", "Anemone", "Gardenia", "Azalea", "Camellia", "Jasmine", "Magnolia", "Bougainvillea"]
     
+    ListOfNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
     # Create text processor with N flower concept
     N_Concepts = 5
-    flowers = [Concept(f"flower{i+1}", ListOfFlowerNames, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
-    text_processor = RawTextProcessor(flowers, max_window_size=N_Concepts, only_concepts=True)
+    ConceptNames= [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
+    text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
     
     # Set up generation config
     generation_config = GenerationConfig(
@@ -522,4 +549,4 @@ if __name__ == "__main__":
     )
     
     # Train the model
-    train(model_config, gen_config, diversity_config, training_config, wandb_config)
+    train(model_config, gen_config, diversity_config, training_config, ConceptNames,wandb_config)
