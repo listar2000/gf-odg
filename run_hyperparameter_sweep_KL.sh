@@ -26,13 +26,13 @@ output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
 
 # Array of KL_penalty values to test
-KL_PENALTY_VALUES=(0.05 0.1 0.2 0.3)
+KL_PENALTY_VALUES=(0.05 0.2 0.5 0.8 2)
 
 # Loop through each KL_penalty value and submit a job
 for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
     # Create a unique output directory and run name based on KL_penalty
     output_dir="${BASE_OUTPUT_DIR}/kl_${kl_penalty}"
-    run_name="animal_kl_${kl_penalty}"
+    run_name="number_kl_${kl_penalty}"
 
     # Create the job script
     job_script=$(mktemp)

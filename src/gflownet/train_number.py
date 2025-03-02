@@ -255,9 +255,14 @@ def train_step(
         raise ValueError("Logits are missing from model or reference model outputs.")
 
     print("************")
-    print("generation sequence",generations["sequences"])
-    print("reference generation sequence",reference_generations["sequences"])
+    for sequence in generations["sequences"]:
+        decoded_list = [model_config.tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
+        print(decoded_list)
+    for sequence in reference_generations["sequences"]:
+        decoded_list = [model_config.tokenizer.decode(token, skip_special_tokens=True) for token in sequence]
+        print(decoded_list)
     print("************")
+
     # Compute KL penalty using the imported function
     kl_penalty = compute_kl_penalty(generations["logits"], reference_generations["logits"], device=device)
 

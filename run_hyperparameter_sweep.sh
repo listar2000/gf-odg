@@ -56,7 +56,7 @@ python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
     --concept_name "animal" \
-    --w_kl 0.1 \
+    --w_kl 0.5 \
     --n_clusters 5 \
     --num_samples 320 \
     --buffer_size 500 \
