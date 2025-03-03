@@ -133,6 +133,13 @@ if __name__ == "__main__":
     parser.add_argument("--output_csv_base", type=str, default="inference_base.csv", help="CSV file for base model results")
     parser.add_argument("--output_csv_adapter", type=str, default="inference_finetuned.csv", help="CSV file for fine-tuned model results")
     parser.add_argument("--max_new_tokens", type=int, default=30, help="Maximum number of new tokens to generate")
+    parser.add_argument("--use_base", type=bool, default=True, help="Path to the fine-tuned LoRA adapter")
+    parser.add_argument(
+        "--model_type",
+        choices=["base", "adapter"],
+        default="base",
+        help="Specify the model type: 'base' (default) or 'adapter'."
+    )
     args = parser.parse_args()
     
     
@@ -151,15 +158,31 @@ if __name__ == "__main__":
     )
 
     tokenizer.pad_token_id = tokenizer.eos_token_id
+    """
+    Run inference N times and save extracted numbers to CSV.
+    """
+    N = args.N
+    if args.model_type == "base":
+        output_csv = args.output_csv_base
+        model_type = "base"
+    else:  # Adapter case
+        output_csv = args.output_csv_adapter
+        model_type = "fine-tuned"
+        model = PeftModel.from_pretrained(model, args.adapter_path)
 
-    adapter_model = PeftModel.from_pretrained(model, args.adapter_path)
-    
+    """
     ListOfNumbers = ['1', '2', '3', '4', '5', '6']
     # Create text processor with N flower concept
-    N_Concepts = 6
+    N_Concepts = 3
     ConceptNames= [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
     text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
-    
+    """
+    #[Red, Blue, Green, Yellow, Orange, Purple]
+    ListOfColors = [ 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple']
+    N_Concepts = 6
+    ConceptNames = [Concept(f"Color{i+1}", ListOfColors, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
+    text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
+
     # Set up generation config
     generation_config = GenerationConfig(
         temperature=1.0,
@@ -171,7 +194,7 @@ if __name__ == "__main__":
     
     # Create configuration objects
     model_config = ModelConfig(
-        model=adapter_model, 
+        model=model, 
         tokenizer=tokenizer, 
         text_processor=text_processor, 
         sentence_transformer=sentence_transformer,
@@ -185,16 +208,6 @@ if __name__ == "__main__":
         generation_config=generation_config
     )
 
-    """
-    Run inference N times and save extracted numbers to CSV.
-    """
-    N = args.N
-    output_csv = args.output_csv_base
-    model_type = "base"
-    if args.adapter_path:
-        output_csv = args.output_csv_adapter
-        model_type = "fine-tuned"
-
     results = []
     for i in range(N // gen_config.batch_size):  # Loop through in batches
         print(f"\nRunning batch {i + 1}/{N // gen_config.batch_size} for {model_type} model...")
@@ -203,7 +216,6 @@ if __name__ == "__main__":
 
         for j in range(gen_config.batch_size):
             results.append([i * gen_config.batch_size + j + 1, model_type, extracted_numbers[j]])
-            print(f"\nRun {i * gen_config.batch_size + j + 1} ({model_type}): {extracted_numbers[j]}")
 
     # Save results to CSV
     with open(output_csv, "w", newline="") as file:

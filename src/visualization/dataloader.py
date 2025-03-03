@@ -1,6 +1,6 @@
 import pandas as pd
 
-def extract_clean_numbers(file_path):
+def extract_clean_numbers(file_path, N=6):
     """
     Reads a CSV file using pandas, removes rows where 'Extracted Numbers' is empty 
     or does not contain exactly six numbers, and returns a list of lists of numbers.
@@ -15,7 +15,7 @@ def extract_clean_numbers(file_path):
     df['Extracted Numbers'] = df['Extracted Numbers'].apply(lambda x: str(x).split(","))
 
     # Filter out rows that do not have exactly six numbers
-    df = df[df['Extracted Numbers'].apply(lambda x: len(x) == 6)]
+    df = df[df['Extracted Numbers'].apply(lambda x: len(x) == N)]
 
     # Convert numbers to integers
     clean_numbers = df['Extracted Numbers'].apply(lambda x: [int(num) for num in x]).tolist()

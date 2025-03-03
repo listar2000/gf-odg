@@ -3,10 +3,9 @@
 #SBATCH --output=/home/jiaweizhang/gf-odg/inference_results/logs/inference_%j.out
 #SBATCH --error=/home/jiaweizhang/gf-odg/inference_results/logs/inference_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32000
+#SBATCH --mem=64000
+#SBATCH --time=30:00
 #SBATCH --gres=gpu:a100:1
-#SBATCH --time=60:00
 #SBATCH --partition=general
 
 # Base model path
@@ -14,17 +13,11 @@ MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 
 # Fine-tuned model adapter path
 ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0000001"
-#ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0"
-#ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0001"
-#ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0001"
-#ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0001"
-#OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_finetuned9e-5KL0.csv"
-# Output directory for inference results
 BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results"
-OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_finetuned9e-5kl_0.0000001.csv"
+OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_finetuned9e-5kl_0.0000001_3.csv"
 
 # Prompt for inference
-PROMPT="Generate 6 random numbers from 1 to 6, independently, separated by commas:"
+PROMPT="Generate 3 random numbers from 1 to 6, independently, separated by commas:"
 
 
 # Ensure output directory exists
@@ -36,7 +29,7 @@ N=$((32 * 500))  # ✅ Fixed arithmetic
 BATCH_SIZE=32  # Default batch size
 
 # CSV output files
-OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_base.csv"
+OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_basdasdasdas.csv"
 
 # Load environment
 eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
@@ -51,6 +44,7 @@ python /home/jiaweizhang/gf-odg/src/gflownet/inference_number.py \
     --batch_size "${BATCH_SIZE}" \
     --output_csv_base "${OUTPUT_CSV_BASE}" \
     --output_csv_adapter "${OUTPUT_CSV_ADAPTER}"\
-    --max_new_tokens 20
+    --max_new_tokens 20 \
+    --model_type adapter
 
 echo "Inference completed!"

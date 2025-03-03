@@ -34,7 +34,7 @@ def plot_histogram(numbers, output_path):
 input_csv = os.path.join(BASE_OUTPUT_DIR, "inference_finetuned9e-5kl_0.0000001.csv")
 
 # Get cleaned numbers (flatten list of lists)
-cleaned_numbers = extract_clean_numbers(input_csv)
+cleaned_numbers = extract_clean_numbers(input_csv, N=3)
 print(cleaned_numbers[:2])  # Print first
 flattened_numbers = [num for sublist in cleaned_numbers for num in sublist]  # Convert list of lists to a single list
 
