@@ -7,7 +7,7 @@ MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 PROMPT="Generate 6 random numbers from 1 to 6, independently of each other, separated by commas. The generated numbers:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr6e-5"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr3e-5"
 
 mkdir -p ${BASE_OUTPUT_DIR}
 
@@ -26,7 +26,7 @@ output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
 
 # Array of KL_penalty values to test
-KL_PENALTY_VALUES=(0 0.0001 0.001 0.01 0.05)
+KL_PENALTY_VALUES=(0.0000001 0.000001 0.00001)
 
 # Loop through each KL_penalty value and submit a job
 for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do

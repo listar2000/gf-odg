@@ -6,7 +6,7 @@ from state import Concept
 from interceptor import RawTextProcessor
 
 
-def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.05):
+def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.05, use_reference_model=True):
     """
     Load a model with LoRA configuration and return model, tokenizer, text_processor, and sentence_transformer.
     
@@ -34,12 +34,14 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
         device_map="auto"
     )
 
-    reference_model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto"
-    )
-    reference_model.eval()
+
+    if use_reference_model:
+        reference_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype=torch.bfloat16,
+            device_map="auto"
+        )
+        reference_model.eval()
 
     
     # Configure LoRA
@@ -59,5 +61,8 @@ def get_lora_model(model_name_or_path, lora_r=8, lora_alpha=32, lora_dropout=0.0
     # Load sentence transformer
     sentence_transformer = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", cache_folder=cache_dir)
     
-    return model, tokenizer, sentence_transformer, reference_model
+    if use_reference_model:
+        return model, tokenizer, sentence_transformer, reference_model
+    else:
+        return model, tokenizer, sentence_transformer
 
