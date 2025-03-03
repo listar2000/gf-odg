@@ -293,8 +293,6 @@ def train_step(
 
     return concept_loss_list, kl_penalty, total_loss.item()
 
-
-
 def train(
     model_config: ModelConfig,
     gen_config: TextGenerationConfig,
