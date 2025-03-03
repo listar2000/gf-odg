@@ -12,7 +12,7 @@ paths:
 
 model:
   model:
-    pretrained_path: ${demos.paths.pretrained}/Meta-Llama-3-8B-Instruct
+    pretrained_path: /net/scratch/llama3/Meta-Llama-3-8B-Instruct
     padding_side: "left"
     pad_token_id: 0
 

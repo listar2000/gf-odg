@@ -4,10 +4,10 @@
 MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 
 # Base prompt
-PROMPT="Generate 5 random numbers from 1 to 5, independently of each other, separated by commas. The generated numbers:"
+PROMPT="Generate 6 random numbers from 1 to 6, independently of each other, separated by commas. The generated numbers:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr6e-5"
 
 mkdir -p ${BASE_OUTPUT_DIR}
 
@@ -26,7 +26,7 @@ output_dir="${BASE_OUTPUT_DIR}/number"
 run_name="number"
 
 # Array of KL_penalty values to test
-KL_PENALTY_VALUES=(0.0001 0.001 0.005 0.01 0.02 0.04 0.08)
+KL_PENALTY_VALUES=(0 0.0001 0.001 0.01 0.05)
 
 # Loop through each KL_penalty value and submit a job
 for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
@@ -49,15 +49,6 @@ for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
 #SBATCH --time=120:00
 #SBATCH --partition=general
 
-# Base model path - update this to your model path
-MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
-
-# Base prompt
-PROMPT="Generate 5 random numbers from 1 to 5, independently of each other, separated by commas. The generated numbers:"
-
-# Base output directory
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number"
-
 # Create output and log directories if they don't exist
 mkdir -p ${output_dir}
 mkdir -p ${BASE_OUTPUT_DIR}/logs
@@ -72,19 +63,13 @@ conda activate FoR
 python /home/jiaweizhang/gf-odg/src/gflownet/train_number.py \
     --model_name_or_path ${MODEL_PATH} \
     --prompt "${PROMPT}" \
-    --concept_name "animal" \
     --w_kl ${kl_penalty} \
-    --n_clusters 5 \
-    --num_samples 320 \
-    --buffer_size 500 \
-    --update_clusters_every 100 \
-    --min_samples_for_clustering 20 \
     --batch_size 32 \
-    --max_new_tokens 30 \
+    --max_new_tokens 20 \
     --num_epochs 10 \
     --num_steps_per_epoch 10 \
-    --learning_rate 1e-4 \
-    --final_learning_rate 3e-5 \
+    --learning_rate 3e-5 \
+    --final_learning_rate 3e-6 \
     --warmup_steps 0 \
     --lr_scheduler_type "cosine" \
     --output_dir ${output_dir} \

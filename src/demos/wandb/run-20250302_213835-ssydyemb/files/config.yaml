@@ -1,0 +1,69 @@
+_wandb:
+    value:
+        cli_version: 0.19.7
+        m: []
+        python_version: 3.10.12
+        t:
+            "1":
+                - 1
+                - 5
+                - 11
+                - 49
+                - 51
+                - 53
+                - 55
+                - 71
+                - 75
+                - 98
+            "2":
+                - 1
+                - 5
+                - 11
+                - 49
+                - 51
+                - 53
+                - 55
+                - 71
+                - 75
+                - 98
+            "3":
+                - 2
+                - 13
+                - 16
+                - 23
+                - 55
+            "4": 3.10.12
+            "5": 0.19.7
+            "6": 4.49.0
+            "8":
+                - 5
+            "12": 0.19.7
+            "13": linux-x86_64
+batch_size:
+    value: 32
+final_learning_rate:
+    value: 3e-06
+learning_rate:
+    value: 3e-05
+lr_scheduler_type:
+    value: cosine
+max_new_tokens:
+    value: 20
+n_clusters:
+    value: 5
+num_epochs:
+    value: 10
+num_samples:
+    value: 320
+num_steps_per_epoch:
+    value: 10
+prompt:
+    value: 'Generate 5 random numbers from 1 to 5, independently of each other, separated by commas. The generated numbers:'
+w_c:
+    value: 0.8
+w_kl:
+    value: 0.01
+w_o:
+    value: 0.2
+warmup_steps:
+    value: 0

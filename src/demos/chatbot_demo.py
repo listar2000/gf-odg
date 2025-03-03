@@ -36,8 +36,7 @@ class Chatbot:
 
         # Load model and tokenizer
         with self.console.status("[bold green]Loading model and tokenizer...", spinner="dots"):
-            self.console.print(f"📂 Loading from: {
-                               self.model_cfg.model.pretrained_path}")
+            self.console.print(f"📂 Loading from: {self.model_cfg.model.pretrained_path}")
 
             # Load base model with eager attention
             self.model = AutoModelForCausalLM.from_pretrained(
@@ -51,7 +50,6 @@ class Chatbot:
                 self.model_cfg.model.pretrained_path,
                 local_files_only=True,
                 padding_side=self.model_cfg.model.padding_side,
-                # pad_token_id=self.model_cfg.model.pad_token_id
             )
 
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -60,7 +58,7 @@ class Chatbot:
             if use_finetuned:
                 adapter_path = Prompt.ask(
                     "[bold yellow]Please enter the path to the LoRA adapter:",
-                    default="/net/scratch2/listar2000/gfn-od/models/finetuned/train_animal/w_o_0.9"
+                    default="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr3e-5/kl_0.0001"
                 )
 
                 self.console.print(
@@ -125,7 +123,7 @@ class Chatbot:
                 with torch.no_grad():
                     outputs = self.model.generate(
                         **inputs,
-                        max_new_tokens=40,
+                        max_new_tokens=100,
                         temperature=1.0,
                         top_p=0.95,
                         repetition_penalty=1.1,

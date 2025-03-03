@@ -42,7 +42,6 @@ class TextGenerationConfig:
 @dataclass
 class DiversityConfig:
     """Configuration for diversity training."""
-    concept_name: str
     n_clusters: int = 5
     max_n_clusters: int = 10
     fixed_n_clusters: bool = False
@@ -334,7 +333,6 @@ def train(
             "max_new_tokens": gen_config.max_new_tokens,
             "num_samples": diversity_config.num_samples,
             "prompt": gen_config.prompt,
-            "concept_name": diversity_config.concept_name
         }
         wandb.init(project=wandb_config.wandb_project, name=wandb_config.wandb_name, config=wandb_config_dict)
     
@@ -494,7 +492,6 @@ if __name__ == "__main__":
     parser.add_argument("--max_new_tokens", type=int, default=30, help="Maximum number of new tokens to generate")
     
     # Diversity config arguments
-    parser.add_argument("--concept_name", type=str, default="animal", help="Name of the concept to diversify")
     parser.add_argument("--n_clusters", type=int, default=5, help="Number of clusters for diversity")
     parser.add_argument("--max_n_clusters", type=int, default=10, help="Maximum number of clusters for diversity")
     parser.add_argument("--fixed_n_clusters", type=bool, default=False, help="Whether to fix the number of clusters")
@@ -539,9 +536,9 @@ if __name__ == "__main__":
         lora_dropout=args.lora_dropout
     )
     
-    ListOfNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    ListOfNumbers = ['1', '2', '3', '4', '5', '6']
     # Create text processor with N flower concept
-    N_Concepts = 5
+    N_Concepts = 6
     ConceptNames= [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
     text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
     
@@ -571,7 +568,6 @@ if __name__ == "__main__":
     )
     
     diversity_config = DiversityConfig(
-        concept_name=args.concept_name, 
         n_clusters=args.n_clusters, 
         num_samples=args.num_samples, 
         w_c=args.w_c, 
