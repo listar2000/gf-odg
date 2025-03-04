@@ -3,8 +3,9 @@
 #SBATCH --output=/home/jiaweizhang/gf-odg/inference_results/logs/inference_%j.out
 #SBATCH --error=/home/jiaweizhang/gf-odg/inference_results/logs/inference_%j.err
 #SBATCH --ntasks=1
-#SBATCH --mem=32000
-#SBATCH --time=10:00
+#SBATCH --mem=64000
+#SBATCH --time=30:00
+#SBATCH --gres=gpu:a100:1
 #SBATCH --partition=general
 
 # Base model path
@@ -17,7 +18,7 @@ BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results"
 OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_fdsadwdasdasd.csv"
 
 # Prompt for inference
-PROMPT="Generate 6 random numbers from 1 to 6, independently, separated by commas:"
+PROMPT="Generate 3 random numbers from 1 to 9, independently, separated by commas:"
 
 # Ensure output directory exists
 mkdir -p "${BASE_OUTPUT_DIR}"
@@ -28,7 +29,7 @@ N=$((32 * 500))  # ✅ Fixed arithmetic
 BATCH_SIZE=32  # Default batch size
 
 # CSV output files
-OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_base.csv"
+OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_base_3_1to9.csv"
 
 # Load environment
 eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed

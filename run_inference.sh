@@ -14,10 +14,10 @@ MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
 # Fine-tuned model adapter path
 ADAPTER_PATH="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0000001"
 BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results"
-OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_finetuned9e-5kl_0.0000001_3.csv"
+OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_finetuned9e-5kl_0.0000001_3_1to9.csv"
 
 # Prompt for inference
-PROMPT="Generate 3 random numbers from 1 to 6, independently, separated by commas:"
+PROMPT="Generate 3 random numbers from 1 to 9, independently, separated by commas:"
 
 
 # Ensure output directory exists
