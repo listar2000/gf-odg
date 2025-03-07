@@ -53,8 +53,6 @@ for kl_penalty in "${KL_PENALTY_VALUES[@]}"; do
 mkdir -p ${output_dir}
 mkdir -p ${BASE_OUTPUT_DIR}/logs
 
-export WANDB_API_KEY="94df40f69fe1711f227d8df8c9cf9ea389060b66"
-
 # Activate your environment if needed
 eval "\$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
 conda activate FoR

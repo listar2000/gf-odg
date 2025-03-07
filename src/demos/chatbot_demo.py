@@ -58,7 +58,7 @@ class Chatbot:
             if use_finetuned:
                 adapter_path = Prompt.ask(
                     "[bold yellow]Please enter the path to the LoRA adapter:",
-                    default="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr9e-5/kl_0.0000001"
+                    default="/home/jiaweizhang/gf-odg/models/finetuned/train_number/kl_0.2"
                 )
 
                 self.console.print(
