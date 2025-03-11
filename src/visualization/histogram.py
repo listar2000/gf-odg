@@ -5,7 +5,7 @@ from collections import Counter
 from dataloader import extract_clean_numbers,extract_clean_colors
 
 
-BASE_OUTPUT_DIR = "/home/jiaweizhang/gf-odg/inference_results"
+BASE_OUTPUT_DIR = "/home/jiaweizhang/gf-odg/inference_results_gemma2"
 
 def plot_histogram(numbers, output_path, N=6):
     """

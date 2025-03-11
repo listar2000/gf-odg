@@ -170,19 +170,20 @@ if __name__ == "__main__":
         model_type = "fine-tuned"
         model = PeftModel.from_pretrained(model, args.adapter_path)
 
-    
-    ListOfNumbers = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    """
+    ListOfNumbers = ['1', '2', '3', '4', '5', '6']
     # Create text processor with N flower concept
     N_Concepts = 3
     ConceptNames= [Concept(f"Number{i+1}", ListOfNumbers, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
     text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
     """
+    
     #[Red, Blue, Green, Yellow, Orange, Purple]
     ListOfColors = [ 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple']
     N_Concepts = 3
     ConceptNames = [Concept(f"Color{i+1}", ListOfColors, case_variants=["capitalized", "lower", "plural"]) for i in range(N_Concepts)]
     text_processor = RawTextProcessor(ConceptNames, max_window_size=N_Concepts, only_concepts=True)
-    """
+    
     # Set up generation config
     generation_config = GenerationConfig(
         temperature=1.0,

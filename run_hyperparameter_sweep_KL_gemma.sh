@@ -7,7 +7,7 @@ MODEL_PATH="/net/scratch/jiaweizhang/gemma2"
 PROMPT="Generate 6 random numbers from 1 to 6, independently of each other, separated by commas. The generated numbers:"
 
 # Base output directory
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results_gemma2"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/models/finetuned/train_number_6_lr3e-5_gemma2"
 
 mkdir -p ${BASE_OUTPUT_DIR}
 

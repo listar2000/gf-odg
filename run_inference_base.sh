@@ -9,16 +9,16 @@
 #SBATCH --partition=general
 
 # Base model path
-MODEL_PATH="/net/scratch/llama3/Meta-Llama-3-8B-Instruct"
+MODEL_PATH="/net/scratch/jiaweizhang/gemma2"
 
 # Fine-tuned model adapter path
 
 # Output directory for inference results
-BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results"
+BASE_OUTPUT_DIR="/home/jiaweizhang/gf-odg/inference_results_gemma2"
 OUTPUT_CSV_ADAPTER="${BASE_OUTPUT_DIR}/inference_fdsadwdasdasd.csv"
 
 # Prompt for inference
-PROMPT="Generate 3 random numbers from 1 to 9, independently, separated by commas:"
+PROMPT="Generate 3 random numbers from 1 to 6, independently, separated by commas:"
 
 # Ensure output directory exists
 mkdir -p "${BASE_OUTPUT_DIR}"
@@ -29,11 +29,7 @@ N=$((32 * 500))  # ✅ Fixed arithmetic
 BATCH_SIZE=32  # Default batch size
 
 # CSV output files
-OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_base_3_1to9.csv"
-
-# Load environment
-eval "$(~/miniconda3/bin/conda shell.bash hook)"  # Adjust path if needed
-conda activate FoR
+OUTPUT_CSV_BASE="${BASE_OUTPUT_DIR}/inference_base_3_1to6.csv"
 
 echo "Running inference on both base and fine-tuned models..."
 python /home/jiaweizhang/gf-odg/src/gflownet/inference_number.py \

@@ -4,7 +4,7 @@ import os
 from collections import Counter
 from dataloader import extract_clean_colors
 
-BASE_OUTPUT_DIR = "/home/jiaweizhang/gf-odg/inference_results"
+BASE_OUTPUT_DIR = "/home/jiaweizhang/gf-odg/inference_results_gemma2"
 
 def plot_color_histogram(colors, output_path):
     """
